@@ -1,24 +1,33 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+import { Ionicons } from "@expo/vector-icons";
+import { Tabs } from "expo-router";
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <Tabs
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: "#2196F3",
+        tabBarInactiveTintColor: "gray",
+        tabBarIcon: ({ color, size }) => {
+          const name =
+            route.name === "index"
+              ? "home"
+              : route.name === "map"
+              ? "map"
+              : "person";
+          return <Ionicons name={name as any} size={size} color={color} />;
+        },
+      })}
+    >
+      <Tabs.Screen
+        name="index"
+        options={{ title: "Home", tabBarLabel: "Home" }}
+      />
+      <Tabs.Screen name="map" options={{ title: "Map", tabBarLabel: "Map" }} />
+      <Tabs.Screen
+        name="profile"
+        options={{ title: "Profile", tabBarLabel: "Profile" }}
+      />
+    </Tabs>
   );
 }
