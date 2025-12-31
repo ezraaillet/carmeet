@@ -3,17 +3,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-// app/index.tsx
 import { useEffect, useState } from "react";
 
-import { Link } from "expo-router";
-import styles from "@/styles/homestyles"; // or change to "../styles/homestyles"
-import { supabase } from "../database/supabase"; // adjust path if you use '@'
+import styles from "@/styles/homestyles";
+import { supabase } from "../database/supabase";
+
+type HomeTab = "friends" | "meets";
 
 export default function Home() {
   const [email, setEmail] = useState("");
@@ -22,7 +21,9 @@ export default function Home() {
   const [authedEmail, setAuthedEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Track auth state
+  const [activeTab, setActiveTab] = useState<HomeTab>("friends");
+
+  // Auth tracking
   useEffect(() => {
     let mounted = true;
 
@@ -65,138 +66,114 @@ export default function Home() {
     setLoading(false);
   }
 
-  async function handleSignOut() {
-    setLoading(true);
-    setError(null);
-    const { error } = await supabase.auth.signOut();
-    if (error) setError(error.message);
-    setLoading(false);
-  }
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={[styles.container, { width: "100%" }]}
     >
-      <Text style={styles.content}>Welcome to CarMeet!</Text>
+      {/* MAIN CONTENT */}
+      <View style={styles.homeBody}>
+        {authedEmail ? (
+          <>
+            {/* 🔥 Top Tabs */}
+            <View style={styles.homeTabsContainer}>
+              {["friends", "meets"].map((tab) => {
+                const t = tab as HomeTab;
+                const selected = activeTab === t;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => setActiveTab(t)}
+                    style={[
+                      styles.homeTabButton,
+                      selected && styles.homeTabButtonActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.homeTabButtonText,
+                        selected && styles.homeTabButtonTextActive,
+                      ]}
+                    >
+                      {t === "friends" ? "Friends" : "Meets"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
-      {authedEmail ? (
-        <>
-          <Text style={{ marginBottom: 12 }}>
-            Signed in as:{" "}
-            <Text style={{ fontWeight: "600" }}>{authedEmail}</Text>
-          </Text>
+            {/* 🔥 Tab Content */}
+            <View style={styles.homeTabContent}>
+              {activeTab === "friends" ? (
+                <Text style={styles.homeTabContentText}>
+                  Friends list goes here
+                </Text>
+              ) : (
+                <Text style={styles.homeTabContentText}>
+                  Meets feed goes here
+                </Text>
+              )}
+            </View>
+          </>
+        ) : (
+          <>
+            {/* LOGIN / SIGNUP FORM */}
+            <View style={{ width: "90%", maxWidth: 420 }}>
+              <TextInput
+                autoCapitalize="none"
+                keyboardType="email-address"
+                placeholder="Email"
+                value={email}
+                onChangeText={setEmail}
+                style={styles.homeInput}
+              />
+              <TextInput
+                placeholder="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                style={styles.homeInput}
+              />
+            </View>
 
-          <Link href="/map" asChild>
+            {error ? (
+              <Text style={{ color: "crimson", marginTop: 8 }}>{error}</Text>
+            ) : null}
+
             <Pressable
+              onPress={handleSignIn}
+              disabled={loading}
               style={({ pressed }) => [
                 styles.button,
                 pressed && styles.buttonPressed,
+                { width: "90%", maxWidth: 420 },
               ]}
             >
-              <Text style={styles.buttonText}>Go to Map</Text>
+              {loading ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.buttonText}>Sign In</Text>
+              )}
             </Pressable>
-          </Link>
 
-          <Pressable
-            onPress={handleSignOut}
-            style={({ pressed }) => [
-              local.btnSecondary,
-              pressed && local.btnPressed,
-            ]}
-          >
-            {loading ? (
-              <ActivityIndicator />
-            ) : (
-              <Text style={local.btnSecondaryText}>Sign out</Text>
-            )}
-          </Pressable>
-        </>
-      ) : (
-        <>
-          <View style={{ width: "90%", maxWidth: 420 }}>
-            <TextInput
-              autoCapitalize="none"
-              keyboardType="email-address"
-              placeholder="Email"
-              value={email}
-              onChangeText={setEmail}
-              style={local.input}
-            />
-            <TextInput
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              style={local.input}
-            />
-          </View>
-
-          {error ? (
-            <Text style={{ color: "crimson", marginTop: 8 }}>{error}</Text>
-          ) : null}
-
-          <Pressable
-            onPress={handleSignIn}
-            disabled={loading}
-            style={({ pressed }) => [
-              styles.button,
-              pressed && styles.buttonPressed,
-              { width: "90%", maxWidth: 420 },
-            ]}
-          >
-            {loading ? (
-              <ActivityIndicator />
-            ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
-            )}
-          </Pressable>
-
-          <Pressable
-            onPress={handleSignUp}
-            disabled={loading}
-            style={({ pressed }) => [
-              local.btnSecondary,
-              pressed && local.btnPressed,
-              { width: "90%", maxWidth: 420 },
-            ]}
-          >
-            {loading ? (
-              <ActivityIndicator />
-            ) : (
-              <Text style={local.btnSecondaryText}>Create Account</Text>
-            )}
-          </Pressable>
-        </>
-      )}
+            <Pressable
+              onPress={handleSignUp}
+              disabled={loading}
+              style={({ pressed }) => [
+                styles.homeSecondaryBtn,
+                pressed && styles.homeSecondaryBtnPressed,
+                { width: "90%", maxWidth: 420 },
+              ]}
+            >
+              {loading ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.homeSecondaryBtnText}>Create Account</Text>
+              )}
+            </Pressable>
+          </>
+        )}
+      </View>
     </KeyboardAvoidingView>
   );
 }
-
-const local = StyleSheet.create({
-  input: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ddd",
-  },
-  btnSecondary: {
-    marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#999",
-    backgroundColor: "#f7f7f7",
-  },
-  btnSecondaryText: {
-    fontWeight: "600",
-  },
-  btnPressed: {
-    opacity: 0.7,
-  },
-});
