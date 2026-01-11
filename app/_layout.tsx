@@ -3,11 +3,13 @@ import { Pressable, Text, View } from "react-native";
 import { useEffect, useState } from "react";
 
 import { Ionicons } from "@expo/vector-icons";
+import { MapDataProvider } from "@/components/MapDataProvider";
 import NotificationsOverlay from "../components/NotificationsOverlay";
 import { Tabs } from "expo-router";
 import { colors } from "../styles/themes";
 import styles from "../styles/homestyles";
 import { supabase } from "../database/supabase";
+import { useMapData } from "@/components/MapDataProvider";
 
 export type FriendRequest = {
   id: string;
@@ -16,6 +18,18 @@ export type FriendRequest = {
   status: string;
   created_at: string;
 };
+
+function MapDataBootstrapper({ userId }: { userId: string | null }) {
+  const { refresh } = useMapData();
+
+  useEffect(() => {
+    console.log("BOOTSTRAP userId:", userId);
+    if (!userId) return;
+    refresh(userId);
+  }, [userId, refresh]);
+
+  return null;
+}
 
 export default function RootLayout() {
   const [authedEmail, setAuthedEmail] = useState<string | null>(null);
@@ -126,81 +140,86 @@ export default function RootLayout() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Header stays on top */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>CarMeet</Text>
-
-        {authedEmail && (
-          <Pressable
-            onPress={openNotifications}
-            style={styles.notifButton}
-            hitSlop={8}
-          >
-            <Ionicons
-              name="notifications-outline"
-              size={24}
-              color={colors.primary}
-            />
-            {pendingCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {pendingCount > 9 ? "9+" : pendingCount}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        )}
-      </View>
-
-      {/* 🌟 Everything below header */}
+    <MapDataProvider>
+      <MapDataBootstrapper userId={userId} />
       <View style={{ flex: 1 }}>
-        <Tabs
-          screenOptions={({ route }) => ({
-            headerShown: false,
-            tabBarActiveTintColor: colors.primary,
-            tabBarInactiveTintColor: colors.offwhite,
-            tabBarStyle: {
-              backgroundColor: colors.black,
-              borderTopColor: colors.gunmetal,
-              borderTopWidth: 1,
-            },
-            tabBarIcon: ({ color, size }) => {
-              const name =
-                route.name === "index"
-                  ? "home"
-                  : route.name === "map"
-                  ? "map"
-                  : "person";
-              return <Ionicons name={name as any} size={size} color={color} />;
-            },
-          })}
-        >
-          <Tabs.Screen
-            name="index"
-            options={{ title: "Home", tabBarLabel: "Home" }}
-          />
-          <Tabs.Screen
-            name="map"
-            options={{ title: "Map", tabBarLabel: "Map" }}
-          />
-          <Tabs.Screen
-            name="profile"
-            options={{ title: "Profile", tabBarLabel: "Profile" }}
-          />
-        </Tabs>
+        {/* Header stays on top */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>CarMeet</Text>
 
-        {/* Overlay now fills this whole area (under header) */}
-        <NotificationsOverlay
-          open={notifOpen}
-          onClose={closeNotifications}
-          pendingRequests={pendingRequests}
-          loading={notifLoading}
-          error={notifError}
-          actionLoadingId={actionLoadingId}
-          onRespond={handleRespond}
-        />
+          {authedEmail && (
+            <Pressable
+              onPress={openNotifications}
+              style={styles.notifButton}
+              hitSlop={8}
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={24}
+                color={colors.primary}
+              />
+              {pendingCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {pendingCount > 9 ? "9+" : pendingCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          )}
+        </View>
+
+        {/* 🌟 Everything below header */}
+        <View style={{ flex: 1 }}>
+          <Tabs
+            screenOptions={({ route }) => ({
+              headerShown: false,
+              tabBarActiveTintColor: colors.primary,
+              tabBarInactiveTintColor: colors.offwhite,
+              tabBarStyle: {
+                backgroundColor: colors.black,
+                borderTopColor: colors.gunmetal,
+                borderTopWidth: 1,
+              },
+              tabBarIcon: ({ color, size }) => {
+                const name =
+                  route.name === "index"
+                    ? "home"
+                    : route.name === "map"
+                    ? "map"
+                    : "person";
+                return (
+                  <Ionicons name={name as any} size={size} color={color} />
+                );
+              },
+            })}
+          >
+            <Tabs.Screen
+              name="index"
+              options={{ title: "Home", tabBarLabel: "Home" }}
+            />
+            <Tabs.Screen
+              name="map"
+              options={{ title: "Map", tabBarLabel: "Map" }}
+            />
+            <Tabs.Screen
+              name="profile"
+              options={{ title: "Profile", tabBarLabel: "Profile" }}
+            />
+          </Tabs>
+
+          {/* Overlay now fills this whole area (under header) */}
+          <NotificationsOverlay
+            open={notifOpen}
+            onClose={closeNotifications}
+            pendingRequests={pendingRequests}
+            loading={notifLoading}
+            error={notifError}
+            actionLoadingId={actionLoadingId}
+            onRespond={handleRespond}
+          />
+        </View>
       </View>
-    </View>
+    </MapDataProvider>
   );
 }
