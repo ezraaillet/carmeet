@@ -37,6 +37,7 @@ type MapDataState = {
   profilesById: Record<string, Profile>;
   locationsById: Record<string, LiveLoc>;
   refresh: (uidOverride?: string | null) => Promise<void>;
+  setMyLiveLocation: (loc: LiveLoc) => void;
 };
 
 const MapDataContext = createContext<MapDataState | null>(null);
@@ -269,6 +270,10 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
     [fetchFriendIds, fetchNearbyUserIds]
   );
 
+  const setMyLiveLocation = useCallback((loc: LiveLoc) => {
+    setLocationsById((prev) => ({ ...prev, [loc.user_id]: loc }));
+  }, []);
+
   const value = useMemo(
     () => ({
       loading,
@@ -278,8 +283,18 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       profilesById,
       locationsById,
       refresh,
+      setMyLiveLocation,
     }),
-    [loading, error, myUserId, ids, profilesById, locationsById, refresh]
+    [
+      loading,
+      error,
+      myUserId,
+      ids,
+      profilesById,
+      locationsById,
+      refresh,
+      setMyLiveLocation,
+    ]
   );
 
   return (

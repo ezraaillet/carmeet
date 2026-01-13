@@ -36,15 +36,40 @@ type Profile = {
   location_visibility?: string | null;
 };
 
+function isFresh(updatedAt?: string | null, maxAgeMs = 2 * 60 * 1000) {
+  if (!updatedAt) return false;
+  const t = new Date(updatedAt).getTime();
+  if (!Number.isFinite(t)) return false;
+  return Date.now() - t <= maxAgeMs;
+}
+
+function formatLastSeen(updatedAt?: string | null) {
+  if (!updatedAt) return "unknown";
+  const t = new Date(updatedAt).getTime();
+  if (!Number.isFinite(t)) return "unknown";
+  const diffMs = Date.now() - t;
+  const sec = Math.max(0, Math.floor(diffMs / 1000));
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.floor(hr / 24);
+  return `${d}d ago`;
+}
+
 export default function MapScreen() {
   console.log("MAP VERSION:", Date.now());
 
   const mapRef = useRef<MapView | null>(null);
 
   // ✅ Use cached map data (friends + nearby) + preloaded profiles
-  const { profilesById, locationsById, loading: mapDataLoading } = useMapData();
-  console.log("locations:", locationsById);
-  console.log("profiles:", profilesById);
+  const {
+    profilesById,
+    locationsById,
+    loading: mapDataLoading,
+    setMyLiveLocation,
+  } = useMapData();
 
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [authed, setAuthed] = useState(false);
@@ -95,8 +120,17 @@ export default function MapScreen() {
   // -------------- Permissions --------------
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setHasPermission(status === Location.PermissionStatus.GRANTED);
+      const fg = await Location.requestForegroundPermissionsAsync();
+      if (fg.status !== "granted") {
+        setHasPermission(false);
+        return;
+      }
+
+      // Ask for “Always”
+      const bg = await Location.requestBackgroundPermissionsAsync();
+      console.log("BG permission:", bg.status);
+
+      setHasPermission(true);
     })();
   }, []);
 
@@ -128,67 +162,103 @@ export default function MapScreen() {
       if (!hasPermission || !authed) return;
 
       let sub: Location.LocationSubscription | null = null;
+      let cancelled = false;
 
       (async () => {
-        const current = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.BestForNavigation,
-        });
+        try {
+          const current = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.BestForNavigation,
+          });
 
-        setRegion((r) => ({
-          ...r,
-          latitude: current.coords.latitude,
-          longitude: current.coords.longitude,
-        }));
+          if (cancelled) return;
 
-        mapRef.current?.animateCamera({
-          center: {
+          // ✅ Update local cache immediately so your marker snaps to true current position
+          const uid =
+            myUserId ?? (await supabase.auth.getUser()).data.user?.id ?? null;
+          if (uid) {
+            setMyLiveLocation({
+              user_id: uid,
+              lat: current.coords.latitude,
+              lng: current.coords.longitude,
+              heading: current.coords.heading ?? undefined,
+              speed: current.coords.speed ?? undefined,
+              updated_at: new Date().toISOString(),
+            });
+          }
+
+          setRegion((r) => ({
+            ...r,
             latitude: current.coords.latitude,
             longitude: current.coords.longitude,
-          },
-          zoom: 15,
-        });
+          }));
 
-        setGotFix(true);
+          mapRef.current?.animateCamera({
+            center: {
+              latitude: current.coords.latitude,
+              longitude: current.coords.longitude,
+            },
+            zoom: 15,
+          });
 
-        await upsertMyLocation(
-          current.coords.latitude,
-          current.coords.longitude,
-          current.coords.heading ?? undefined,
-          current.coords.speed ?? undefined
-        );
+          setGotFix(true);
 
-        sub = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.BestForNavigation,
-            distanceInterval: 5,
-            timeInterval: 3000,
-          },
-          async ({ coords }) => {
-            setRegion((r) => ({
-              ...r,
-              latitude: coords.latitude,
-              longitude: coords.longitude,
-            }));
+          await upsertMyLocation(
+            current.coords.latitude,
+            current.coords.longitude,
+            current.coords.heading ?? undefined,
+            current.coords.speed ?? undefined
+          );
 
-            mapRef.current?.animateCamera({
-              center: {
+          sub = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy.BestForNavigation,
+              distanceInterval: 5,
+              timeInterval: 3000,
+            },
+            async ({ coords }) => {
+              // ✅ Keep local cache in sync so your marker moves immediately
+              if (myUserId) {
+                setMyLiveLocation({
+                  user_id: myUserId,
+                  lat: coords.latitude,
+                  lng: coords.longitude,
+                  heading: coords.heading ?? undefined,
+                  speed: coords.speed ?? undefined,
+                  updated_at: new Date().toISOString(),
+                });
+              }
+
+              setRegion((r) => ({
+                ...r,
                 latitude: coords.latitude,
                 longitude: coords.longitude,
-              },
-            });
+              }));
 
-            await upsertMyLocation(
-              coords.latitude,
-              coords.longitude,
-              coords.heading ?? undefined,
-              coords.speed ?? undefined
-            );
-          }
-        );
+              mapRef.current?.animateCamera({
+                center: {
+                  latitude: coords.latitude,
+                  longitude: coords.longitude,
+                },
+              });
+
+              await upsertMyLocation(
+                coords.latitude,
+                coords.longitude,
+                coords.heading ?? undefined,
+                coords.speed ?? undefined
+              );
+            }
+          );
+        } catch (e: any) {
+          console.warn("Location watch error:", e?.message ?? e);
+        }
       })();
 
-      return () => sub?.remove();
-    }, [hasPermission, authed, upsertMyLocation])
+      return () => {
+        cancelled = true;
+        sub?.remove();
+      };
+    }, [hasPermission, authed, upsertMyLocation, setMyLiveLocation, myUserId])
   );
 
   // ✅ Replace local "all" with cached locations
@@ -357,16 +427,12 @@ export default function MapScreen() {
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
       >
-        {/* ✅ Render only markers with loaded profiles (prevents "pop in") */}
+        {/* ✅ Render only markers with loaded profiles */}
         {spread
           .filter(({ loc }) => !!profilesById[loc.user_id])
           .map(({ loc, adjLat, adjLng }) => {
             const p = profilesById[loc.user_id];
 
-            // ✅ Use actual profile photo for marker
-            const markerUri = p?.photo_url ?? null;
-
-            // fallback initials if no photo
             const markerName =
               p?.display_name || p?.username || loc.user_id.slice(0, 8);
 
@@ -377,12 +443,20 @@ export default function MapScreen() {
               .slice(0, 2)
               .toUpperCase();
 
+            const fresh = isFresh(loc.updated_at, 2 * 60 * 1000);
+            const lastSeen = formatLastSeen(loc.updated_at);
+
+            // ✅ Use actual profile photo for marker
+            const markerUri = p?.photo_url ?? null;
+
             return (
               <Marker
                 key={loc.user_id}
                 coordinate={{ latitude: adjLat, longitude: adjLng }}
                 anchor={{ x: 0.5, y: 0.5 }}
                 title={markerName}
+                // ✅ show last seen in native callout
+                description={fresh ? "Live" : `Last seen ${lastSeen}`}
                 zIndex={999}
                 onPress={() => handleMarkerPress(loc.user_id)}
               >
@@ -396,6 +470,7 @@ export default function MapScreen() {
                       borderWidth: 2,
                       borderRadius: 22,
                       backgroundColor: "#000",
+                      opacity: fresh ? 1 : 0.45, // ✅ ghost stale users
                     }}
                   />
                 ) : (
@@ -409,6 +484,7 @@ export default function MapScreen() {
                       alignItems: "center",
                       justifyContent: "center",
                       backgroundColor: "#222",
+                      opacity: fresh ? 1 : 0.45, // ✅ ghost stale users
                     }}
                   >
                     <Text style={{ color: "white", fontWeight: "700" }}>
@@ -447,6 +523,14 @@ export default function MapScreen() {
                 {selectedProfile?.location_visibility && (
                   <Text style={styles.cardSubSmall}>
                     Location: {selectedProfile.location_visibility}
+                  </Text>
+                )}
+
+                {/* ✅ show last seen in your overlay card too */}
+                {locationsById[selectedUserId]?.updated_at && (
+                  <Text style={styles.cardSubSmall}>
+                    Last seen:{" "}
+                    {formatLastSeen(locationsById[selectedUserId]?.updated_at)}
                   </Text>
                 )}
               </View>
