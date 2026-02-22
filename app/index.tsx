@@ -11,11 +11,14 @@ import { useEffect, useMemo, useState } from "react";
 
 import styles from "@/styles/homestyles";
 import { supabase } from "../database/supabase";
+import { useRouter } from "expo-router";
 
 type HomeTab = "friends" | "meets";
 type AuthMode = "signin" | "signup" | null;
 
 export default function Home() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -23,11 +26,13 @@ export default function Home() {
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   const [authedEmail, setAuthedEmail] = useState<string | null>(null);
+  const [authedUserId, setAuthedUserId] = useState<string | null>(null);
+
   const [error, setError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<HomeTab>("friends");
 
-  // NEW: choose which auth flow (prevents empty signups)
+  // choose which auth flow (prevents empty signups)
   const [authMode, setAuthMode] = useState<AuthMode>(null);
 
   const cleanEmail = useMemo(() => (email ?? "").trim(), [email]);
@@ -35,6 +40,27 @@ export default function Home() {
     () => cleanEmail.length > 0 && (password ?? "").length >= 6,
     [cleanEmail, password]
   );
+
+  async function routeAfterAuth(uid: string) {
+    // If you ever decide to drop the onboarded column, swap this logic.
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("onboarded")
+      .eq("id", uid)
+      .maybeSingle<{ onboarded: boolean }>();
+
+    if (error) {
+      // If profile row doesn't exist yet, they must go to profile to create it
+      router.replace("/profile");
+      return;
+    }
+
+    if (!data?.onboarded) {
+      router.replace("/profile");
+    } else {
+      router.replace("/map");
+    }
+  }
 
   // Auth tracking
   useEffect(() => {
@@ -44,14 +70,17 @@ export default function Home() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (mounted) {
-        setAuthedEmail(user?.email ?? null);
-        setCheckingAuth(false);
-      }
+
+      if (!mounted) return;
+
+      setAuthedEmail(user?.email ?? null);
+      setAuthedUserId(user?.id ?? null);
+      setCheckingAuth(false);
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthedEmail(session?.user?.email ?? null);
+      setAuthedUserId(session?.user?.id ?? null);
       setCheckingAuth(false);
     });
 
@@ -76,18 +105,27 @@ export default function Home() {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: cleanEmail,
       password,
     });
 
     if (error) {
       setError(error.message);
-    } else {
-      setAuthMode(null);
-      setEmail("");
-      setPassword("");
+      setLoading(false);
+      return;
     }
+
+    const uid = data.user?.id;
+    if (uid) {
+      // ✅ THIS is where redirect should happen (because sign-in actually has a session)
+      await routeAfterAuth(uid);
+    }
+
+    // reset fields so they don't accidentally resubmit blanks later
+    setAuthMode(null);
+    setEmail("");
+    setPassword("");
 
     setLoading(false);
   }
@@ -98,7 +136,6 @@ export default function Home() {
 
     const passLen = (password ?? "").length;
 
-    // optional helpful logs for debugging (keep for now, remove later)
     console.log("SIGNUP INPUT:", {
       rawEmail: email,
       cleanEmail,
@@ -127,20 +164,31 @@ export default function Home() {
 
     if (error) {
       setError(error.message);
-    } else if (data?.user && !data?.session) {
-      // confirm-email ON => session often null
-      setError("Check your email to confirm your account, then sign in.");
-      // reset fields so they don't accidentally resubmit blanks later
-      setEmail("");
-      setPassword("");
-      setAuthMode(null);
-    } else {
-      // in case your project ever disables confirm-email in the future
-      setAuthMode(null);
-      setEmail("");
-      setPassword("");
+      setLoading(false);
+      return;
     }
 
+    // ✅ Confirm-email ON => session is null => no redirect yet
+    if (data?.user && !data?.session) {
+      setError("Check your email to confirm your account, then sign in.");
+      setAuthMode(null);
+      setEmail("");
+      setPassword("");
+      setLoading(false);
+      return;
+    }
+
+    // If confirm-email ever gets turned OFF, this will work:
+    const uid = data?.user?.id;
+    if (uid) {
+      await routeAfterAuth(uid);
+    } else {
+      router.replace("/profile");
+    }
+
+    setAuthMode(null);
+    setEmail("");
+    setPassword("");
     setLoading(false);
   }
 
@@ -159,6 +207,7 @@ export default function Home() {
     setPassword("");
   }
 
+  // ✅ Loading splash while auth is being determined
   if (checkingAuth) {
     return (
       <View
@@ -167,9 +216,7 @@ export default function Home() {
           { justifyContent: "center", alignItems: "center" },
         ]}
       >
-        <Text style={{ fontSize: 42, fontWeight: "800", letterSpacing: 1 }}>
-          CarMeet
-        </Text>
+        <Text style={styles.loadingIcon}>CarMeet</Text>
         <ActivityIndicator style={{ marginTop: 20 }} size="large" />
       </View>
     );
@@ -180,11 +227,9 @@ export default function Home() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={[styles.container, { width: "100%" }]}
     >
-      {/* MAIN CONTENT */}
       <View style={styles.homeBody}>
         {authedEmail ? (
           <>
-            {/* 🔥 Top Tabs */}
             <View style={styles.homeTabsContainer}>
               {["friends", "meets"].map((tab) => {
                 const t = tab as HomeTab;
@@ -211,7 +256,6 @@ export default function Home() {
               })}
             </View>
 
-            {/* 🔥 Tab Content */}
             <View style={styles.homeTabContent}>
               {activeTab === "friends" ? (
                 <Text style={styles.homeTabContentText}>
@@ -226,7 +270,6 @@ export default function Home() {
           </>
         ) : (
           <>
-            {/* STEP 1: Show only buttons */}
             {authMode === null ? (
               <View style={{ width: "90%", maxWidth: 420 }}>
                 <Pressable
@@ -254,7 +297,6 @@ export default function Home() {
                 </Pressable>
               </View>
             ) : (
-              /* STEP 2: Show fields + confirm */
               <View style={{ width: "90%", maxWidth: 420 }}>
                 <Text
                   style={{ marginBottom: 10, fontSize: 16, fontWeight: "600" }}

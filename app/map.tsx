@@ -18,6 +18,7 @@ import styles from "@/styles/mapstyles";
 import { supabase } from "../database/supabase";
 import { useFocusEffect } from "@react-navigation/native";
 import { useMapData } from "@/components/MapDataProvider";
+import { useRouter } from "expo-router";
 
 type LiveLoc = {
   user_id: string;
@@ -61,6 +62,7 @@ function formatLastSeen(updatedAt?: string | null) {
 export default function MapScreen() {
   console.log("MAP VERSION:", Date.now());
 
+  const router = useRouter();
   const mapRef = useRef<MapView | null>(null);
 
   // ✅ Use cached map data (friends + nearby) + preloaded profiles
@@ -74,6 +76,10 @@ export default function MapScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [authed, setAuthed] = useState(false);
   const [myUserId, setMyUserId] = useState<string | null>(null);
+
+  // ✅ STEP 5: onboarding gate
+  const [checkingOnboarded, setCheckingOnboarded] = useState(true);
+  const [isOnboarded, setIsOnboarded] = useState<boolean>(true); // default true to avoid flicker pre-auth
 
   // NEW: GPS fix gate
   const [gotFix, setGotFix] = useState(false);
@@ -117,6 +123,46 @@ export default function MapScreen() {
     };
   }, []);
 
+  // ✅ STEP 5: check onboarded when auth/user changes
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      // Not signed in yet → don’t block, just stop checking
+      if (!authed || !myUserId) {
+        setCheckingOnboarded(false);
+        setIsOnboarded(true);
+        return;
+      }
+
+      setCheckingOnboarded(true);
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("onboarded")
+        .eq("id", myUserId)
+        .maybeSingle<{ onboarded: boolean }>();
+
+      console.log(data);
+
+      if (cancelled) return;
+
+      if (error) {
+        console.warn("onboarded check error:", error.message);
+        // Fail-open so you don’t soft-lock due to a transient error
+        setIsOnboarded(true);
+      } else {
+        setIsOnboarded(!!data?.onboarded);
+      }
+
+      setCheckingOnboarded(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authed, myUserId]);
+
   // -------------- Permissions --------------
   useEffect(() => {
     (async () => {
@@ -159,7 +205,8 @@ export default function MapScreen() {
   // -------------- Watch while focused --------------
   useFocusEffect(
     useCallback(() => {
-      if (!hasPermission || !authed) return;
+      // ✅ Don’t start location work if they aren’t onboarded
+      if (!hasPermission || !authed || !isOnboarded) return;
 
       let sub: Location.LocationSubscription | null = null;
       let cancelled = false;
@@ -258,7 +305,14 @@ export default function MapScreen() {
         cancelled = true;
         sub?.remove();
       };
-    }, [hasPermission, authed, upsertMyLocation, setMyLiveLocation, myUserId])
+    }, [
+      hasPermission,
+      authed,
+      isOnboarded,
+      upsertMyLocation,
+      setMyLiveLocation,
+      myUserId,
+    ])
   );
 
   // ✅ Replace local "all" with cached locations
@@ -377,6 +431,43 @@ export default function MapScreen() {
     }
   }, [myUserId, selectedUserId]);
 
+  // ✅ STEP 5 UI: block map if not onboarded
+  if (checkingOnboarded) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+        <Text style={{ marginTop: 12 }}>Checking profile…</Text>
+      </View>
+    );
+  }
+
+  if (authed && !isOnboarded) {
+    console.log(authed);
+    console.log(isOnboarded);
+    return (
+      <View style={styles.center}>
+        <Text style={{ fontSize: 18, fontWeight: "700" }}>
+          Finish your profile first
+        </Text>
+        <Text style={{ marginTop: 10, textAlign: "center", opacity: 0.85 }}>
+          Add your username/photo and choose your location visibility before
+          using the map.
+        </Text>
+
+        <Pressable
+          onPress={() => router.replace("/profile")}
+          style={({ pressed }) => [
+            styles.friendBtn,
+            { marginTop: 16, paddingHorizontal: 18 },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <Text style={styles.friendBtnText}>Go to Profile</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   // -------------- Loader logic --------------
   const showLoader =
     !authed ||
@@ -455,7 +546,6 @@ export default function MapScreen() {
                 coordinate={{ latitude: adjLat, longitude: adjLng }}
                 anchor={{ x: 0.5, y: 0.5 }}
                 title={markerName}
-                // ✅ show last seen in native callout
                 description={fresh ? "Live" : `Last seen ${lastSeen}`}
                 zIndex={999}
                 onPress={() => handleMarkerPress(loc.user_id)}
@@ -463,29 +553,11 @@ export default function MapScreen() {
                 {markerUri ? (
                   <Image
                     source={{ uri: markerUri }}
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderColor: "white",
-                      borderWidth: 2,
-                      borderRadius: 22,
-                      backgroundColor: "#000",
-                      opacity: fresh ? 1 : 0.45, // ✅ ghost stale users
-                    }}
+                    style={[styles.icon, { opacity: fresh ? 1 : 0.45 }]}
                   />
                 ) : (
                   <View
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 22,
-                      borderColor: "white",
-                      borderWidth: 2,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      backgroundColor: "#222",
-                      opacity: fresh ? 1 : 0.45, // ✅ ghost stale users
-                    }}
+                    style={[styles.iconInitials, { opacity: fresh ? 1 : 0.45 }]}
                   >
                     <Text style={{ color: "white", fontWeight: "700" }}>
                       {markerInitials}
@@ -526,7 +598,6 @@ export default function MapScreen() {
                   </Text>
                 )}
 
-                {/* ✅ show last seen in your overlay card too */}
                 {locationsById[selectedUserId]?.updated_at && (
                   <Text style={styles.cardSubSmall}>
                     Last seen:{" "}

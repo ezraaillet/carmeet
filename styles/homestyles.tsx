@@ -28,6 +28,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
+  loadingIcon: {
+    color: colors.primary,
+    fontSize: 42,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
 
   // Header
   header: {
@@ -182,7 +188,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-    /* ---------------------------
+  /* ---------------------------
       HOME PAGE TABS
   ----------------------------*/
 
@@ -242,7 +248,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#ddd",
   },
-  
+
   homeSecondaryBtn: {
     marginTop: 12,
     paddingVertical: 12,
@@ -259,7 +265,6 @@ const styles = StyleSheet.create({
   homeSecondaryBtnPressed: {
     opacity: 0.7,
   },
-
 });
 
 export default styles;

@@ -1,11 +1,10 @@
 import { MapDataProvider, useMapData } from "@/components/MapDataProvider";
-// app/_layout.tsx
 import { Pressable, Text, View } from "react-native";
+import { Tabs, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
 import { Ionicons } from "@expo/vector-icons";
 import NotificationsOverlay from "../components/NotificationsOverlay";
-import { Tabs } from "expo-router";
 import { colors } from "../styles/themes";
 import styles from "../styles/homestyles";
 import { supabase } from "../database/supabase";
@@ -20,6 +19,10 @@ export type FriendRequest = {
 
 function RootLayoutInner() {
   const { refresh } = useMapData();
+  const router = useRouter();
+
+  const [onboarded, setOnboarded] = useState<boolean>(false);
+  const [checkingOnboard, setCheckingOnboard] = useState<boolean>(false);
 
   const [authedEmail, setAuthedEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -32,6 +35,37 @@ function RootLayoutInner() {
   const [notifError, setNotifError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
+  const fetchOnboarded = useCallback(
+    async (uid: string) => {
+      setCheckingOnboard(true);
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("onboarded")
+        .eq("id", uid)
+        .maybeSingle<{ onboarded: boolean }>();
+
+      if (error) {
+        console.warn("fetch onboarded error:", error.message);
+        setOnboarded(false);
+        setCheckingOnboard(false);
+        // if profile row missing or query blocked, safest is send to profile
+        router.replace("/profile");
+        return;
+      }
+
+      const ok = !!data?.onboarded;
+      setOnboarded(ok);
+      setCheckingOnboard(false);
+
+      // ✅ If signed in but not onboarded, force Profile
+      if (!ok) {
+        router.replace("/profile");
+      }
+    },
+    [router]
+  );
+
   // Track auth
   useEffect(() => {
     (async () => {
@@ -41,16 +75,28 @@ function RootLayoutInner() {
 
       setAuthedEmail(user?.email ?? null);
       setUserId(user?.id ?? null);
+
+      if (user?.id) fetchOnboarded(user.id);
+      else {
+        setOnboarded(false);
+        setCheckingOnboard(false);
+      }
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       const user = session?.user ?? null;
       setAuthedEmail(user?.email ?? null);
       setUserId(user?.id ?? null);
+
+      if (user?.id) fetchOnboarded(user.id);
+      else {
+        setOnboarded(false);
+        setCheckingOnboard(false);
+      }
     });
 
     return () => sub.subscription.unsubscribe();
-  }, []);
+  }, [fetchOnboarded]);
 
   // Fetch pending requests list + count
   const fetchPendingRequests = useCallback(async () => {
@@ -93,13 +139,39 @@ function RootLayoutInner() {
     }
 
     fetchPendingRequests();
+
     // preload friends + nearby + profiles
-    // (your MapDataProvider refresh currently accepts userId)
     // @ts-ignore
     refresh(userId);
   }, [userId, fetchPendingRequests, refresh]);
 
-  // ✅ Realtime updates for friend requests
+  // realtime profile onboard watch
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel("profile-onboarded-watch")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${userId}`,
+        },
+        (payload) => {
+          const next = (payload.new as any)?.onboarded;
+          setOnboarded(!!next);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
+
+  // Realtime updates for friend requests
   useEffect(() => {
     if (!userId) return;
 
@@ -155,7 +227,6 @@ function RootLayoutInner() {
         return;
       }
 
-      // Optimistic UI update
       setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
       setPendingCount((prev) => Math.max(0, prev - 1));
 
@@ -195,7 +266,6 @@ function RootLayoutInner() {
         )}
       </View>
 
-      {/* Everything below header */}
       <View style={{ flex: 1 }}>
         <Tabs
           screenOptions={({ route }) => ({
@@ -222,10 +292,30 @@ function RootLayoutInner() {
             name="index"
             options={{ title: "Home", tabBarLabel: "Home" }}
           />
+
           <Tabs.Screen
             name="map"
-            options={{ title: "Map", tabBarLabel: "Map" }}
+            options={{
+              title: "Map",
+              tabBarLabel: "Map",
+            }}
+            listeners={{
+              tabPress: (e) => {
+                if (!userId) return; // not signed in; Home screen should handle auth UX
+
+                if (checkingOnboard) {
+                  e.preventDefault();
+                  return;
+                }
+
+                if (!onboarded) {
+                  e.preventDefault();
+                  router.push("/profile");
+                }
+              },
+            }}
           />
+
           <Tabs.Screen
             name="profile"
             options={{ title: "Profile", tabBarLabel: "Profile" }}

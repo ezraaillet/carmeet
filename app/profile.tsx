@@ -12,12 +12,11 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { colors } from "../styles/themes";
 import s from "@/styles/profilestyles";
 import { supabase } from "../database/supabase";
-import { useFocusEffect } from "@react-navigation/native";
+import { useMapData } from "@/components/MapDataProvider";
 
 type ProfileRow = {
   id: string;
@@ -25,10 +24,17 @@ type ProfileRow = {
   display_name: string | null;
   photo_url: string | null;
   location_visibility: string | null;
-  created_at: string;
+  created_at?: string;
 };
 
 export default function ProfileScreen() {
+  const {
+    myUserId,
+    profilesById,
+    refresh,
+    loading: mapDataLoading,
+  } = useMapData();
+
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [email, setEmail] = useState<string | null>(null);
 
@@ -38,7 +44,7 @@ export default function ProfileScreen() {
   const [locationVis, setLocationVis] = useState("everyone");
 
   const [editing, setEditing] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loadingLocal, setLoadingLocal] = useState(true);
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,74 +59,118 @@ export default function ProfileScreen() {
       .toUpperCase();
   }, [displayName, username, email]);
 
-  // -----------------------------
-  // Load profile when screen is focused
-  // -----------------------------
-  const loadProfile = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // Load email once (auth metadata)
+  useEffect(() => {
+    let mounted = true;
 
-    const { data: userRes, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userRes?.user) {
-      setError(userErr?.message ?? "Not signed in.");
-      setProfile(null);
-      setLoading(false);
-      return;
-    }
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (!mounted) return;
+      setEmail(data.user?.email ?? null);
+    })();
 
-    const user = userRes.user;
-    setEmail(user.email ?? null);
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
+      if (!mounted) return;
+      setEmail(session?.user?.email ?? null);
+    });
 
-    let { data, error: selErr } = await supabase
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  // Helper: ensure a profile row exists for the current user (only if missing)
+  const ensureMyProfileExists = useCallback(async (uid: string) => {
+    // Try fetch just my row
+    const { data, error: selErr } = await supabase
       .from("profiles")
       .select("*")
-      .eq("id", user.id)
+      .eq("id", uid)
       .maybeSingle<ProfileRow>();
 
-    let row = data ?? null;
+    if (selErr) throw selErr;
 
-    // If no row → create one
-    if (!row) {
-      const insertPayload = {
-        id: user.id,
-        username: user.email ? user.email.split("@")[0] : null,
-        display_name: null,
-        photo_url: null,
-        location_visibility: "everyone",
-      };
+    if (data) return data;
 
-      const { data: inserted, error: insErr } = await supabase
-        .from("profiles")
-        .insert(insertPayload)
-        .select("*")
-        .single<ProfileRow>();
+    // Create one if missing
+    const { data: authRes } = await supabase.auth.getUser();
+    const userEmail = authRes.user?.email ?? null;
 
-      if (insErr) {
-        setError(insErr.message);
-        setLoading(false);
+    const insertPayload = {
+      id: uid,
+      username: userEmail ? userEmail.split("@")[0] : null,
+      display_name: null,
+      photo_url: null,
+      location_visibility: "everyone",
+    };
+
+    const { data: inserted, error: insErr } = await supabase
+      .from("profiles")
+      .insert(insertPayload)
+      .select("*")
+      .single<ProfileRow>();
+
+    if (insErr) throw insErr;
+
+    return inserted;
+  }, []);
+
+  // 1) Prefer cached profile from provider
+  // 2) If missing, ensure it exists in DB then refresh provider cache
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setError(null);
+
+      if (!myUserId) {
+        setProfile(null);
+        setLoadingLocal(false);
         return;
       }
 
-      row = inserted;
-    }
+      // If provider already has it, use it immediately
+      const cached = profilesById?.[myUserId] as ProfileRow | undefined;
+      if (cached) {
+        if (!cancelled) {
+          setProfile(cached);
+          setUsername(cached.username ?? "");
+          setDisplayName(cached.display_name ?? "");
+          setPhotoUrl(cached.photo_url ?? null);
+          setLocationVis(cached.location_visibility ?? "everyone");
+          setLoadingLocal(false);
+        }
+        return;
+      }
 
-    // Set state
-    if (row) {
-      setProfile(row);
-      setUsername(row.username ?? "");
-      setDisplayName(row.display_name ?? "");
-      setPhotoUrl(row.photo_url ?? null);
-      setLocationVis(row.location_visibility ?? "everyone");
-    }
+      // Otherwise: create/fetch just my profile row, then refresh provider cache
+      try {
+        setLoadingLocal(true);
+        const row = await ensureMyProfileExists(myUserId);
 
-    setLoading(false);
-  }, []);
+        if (cancelled) return;
 
-  useFocusEffect(
-    useCallback(() => {
-      loadProfile();
-    }, [loadProfile])
-  );
+        // Set local immediately
+        setProfile(row);
+        setUsername(row.username ?? "");
+        setDisplayName(row.display_name ?? "");
+        setPhotoUrl(row.photo_url ?? null);
+        setLocationVis(row.location_visibility ?? "everyone");
+
+        // Ask provider to reload its cache (friends + nearby + profiles)
+        await refresh(myUserId);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? "Failed to load profile.");
+      } finally {
+        if (!cancelled) setLoadingLocal(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [myUserId, profilesById, refresh, ensureMyProfileExists]);
 
   // -----------------------------
   // Pick + upload avatar
@@ -154,12 +204,12 @@ export default function ProfileScreen() {
   async function uploadAvatar(
     asset: ImagePicker.ImagePickerAsset
   ): Promise<string> {
-    if (!profile?.id) throw new Error("No user id");
+    if (!myUserId) throw new Error("No user id");
 
     const ext =
       asset.fileName?.split(".").pop() || asset.uri.split(".").pop() || "jpg";
 
-    const path = `${profile.id}/${Date.now()}.${ext}`;
+    const path = `${myUserId}/${Date.now()}.${ext}`;
 
     const contentType =
       asset.mimeType ||
@@ -203,7 +253,7 @@ export default function ProfileScreen() {
   }
 
   async function saveProfile() {
-    if (!profile?.id) return;
+    if (!myUserId) return;
 
     setSaving(true);
     setError(null);
@@ -213,12 +263,13 @@ export default function ProfileScreen() {
       display_name: displayName.trim() || null,
       photo_url: photoUrl || null,
       location_visibility: locationVis || null,
+      onboarded: true,
     };
 
     const { data, error: upErr } = await supabase
       .from("profiles")
       .update(payload)
-      .eq("id", profile.id)
+      .eq("id", myUserId)
       .select("*")
       .single<ProfileRow>();
 
@@ -228,8 +279,13 @@ export default function ProfileScreen() {
       return;
     }
 
+    // Update local immediately
     setProfile(data);
     setEditing(false);
+
+    // Refresh provider cache so Map markers/cards use new photo/name immediately
+    await refresh(myUserId);
+
     setSaving(false);
   }
 
@@ -245,6 +301,8 @@ export default function ProfileScreen() {
       setSigningOut(false);
     }
   }
+
+  const loading = loadingLocal || mapDataLoading;
 
   // -----------------------------
   // UI
@@ -262,6 +320,7 @@ export default function ProfileScreen() {
     return (
       <View style={s.center}>
         <Text>Profile not found.</Text>
+        {error ? <Text style={s.error}>{error}</Text> : null}
       </View>
     );
   }
