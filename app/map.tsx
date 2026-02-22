@@ -76,6 +76,7 @@ export default function MapScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [authed, setAuthed] = useState(false);
   const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   // ✅ STEP 5: onboarding gate
   const [checkingOnboarded, setCheckingOnboarded] = useState(true);
@@ -109,12 +110,14 @@ export default function MapScreen() {
       if (mounted) {
         setAuthed(!!user);
         setMyUserId(user?.id ?? null);
+        setCheckingAuth(false);
       }
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => {
       setAuthed(!!session?.user);
       setMyUserId(session?.user?.id ?? null);
+      setCheckingAuth(false);
     });
 
     return () => {
@@ -128,10 +131,10 @@ export default function MapScreen() {
     let cancelled = false;
 
     (async () => {
-      // Not signed in yet → don’t block, just stop checking
+      // Not signed in: block map access
       if (!authed || !myUserId) {
         setCheckingOnboarded(false);
-        setIsOnboarded(true);
+        setIsOnboarded(false);
         return;
       }
 
@@ -149,8 +152,8 @@ export default function MapScreen() {
 
       if (error) {
         console.warn("onboarded check error:", error.message);
-        // Fail-open so you don’t soft-lock due to a transient error
-        setIsOnboarded(true);
+        // Fail-closed: keep users off map until profile state is known
+        setIsOnboarded(false);
       } else {
         setIsOnboarded(!!data?.onboarded);
       }
@@ -162,6 +165,19 @@ export default function MapScreen() {
       cancelled = true;
     };
   }, [authed, myUserId]);
+
+  useEffect(() => {
+    if (checkingAuth || checkingOnboarded) return;
+
+    if (!authed) {
+      router.replace("/");
+      return;
+    }
+
+    if (!isOnboarded) {
+      router.replace("/profile");
+    }
+  }, [checkingAuth, checkingOnboarded, authed, isOnboarded, router]);
 
   // -------------- Permissions --------------
   useEffect(() => {
@@ -432,37 +448,38 @@ export default function MapScreen() {
   }, [myUserId, selectedUserId]);
 
   // ✅ STEP 5 UI: block map if not onboarded
-  if (checkingOnboarded) {
+  if (checkingAuth || checkingOnboarded) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />
-        <Text style={{ marginTop: 12 }}>Checking profile…</Text>
+        <Text style={{ marginTop: 12 }}>Checking account…</Text>
       </View>
     );
   }
 
-  if (authed && !isOnboarded) {
-    console.log(authed);
-    console.log(isOnboarded);
+  if (!authed || !isOnboarded) {
     return (
       <View style={styles.center}>
         <Text style={{ fontSize: 18, fontWeight: "700" }}>
-          Finish your profile first
+          {!authed ? "Sign in required" : "Finish your profile first"}
         </Text>
         <Text style={{ marginTop: 10, textAlign: "center", opacity: 0.85 }}>
-          Add your username/photo and choose your location visibility before
-          using the map.
+          {!authed
+            ? "Please sign in or create an account before using the map."
+            : "Add your username/photo and choose your location visibility before using the map."}
         </Text>
 
         <Pressable
-          onPress={() => router.replace("/profile")}
+          onPress={() => router.replace(!authed ? "/" : "/profile")}
           style={({ pressed }) => [
             styles.friendBtn,
             { marginTop: 16, paddingHorizontal: 18 },
             pressed && { opacity: 0.85 },
           ]}
         >
-          <Text style={styles.friendBtnText}>Go to Profile</Text>
+          <Text style={styles.friendBtnText}>
+            {!authed ? "Go to Home" : "Go to Profile"}
+          </Text>
         </Pressable>
       </View>
     );
