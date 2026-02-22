@@ -200,6 +200,15 @@ function RootLayoutInner() {
     };
   }, [userId, fetchPendingRequests]);
 
+
+  // Re-check onboarding when returning to Profile so tab gating updates immediately
+  useEffect(() => {
+    if (checkingAuth || !userId) return;
+    if (pathname !== "/profile") return;
+
+    fetchOnboarded(userId);
+  }, [checkingAuth, userId, pathname, fetchOnboarded]);
+
   useEffect(() => {
     if (checkingAuth || checkingOnboard) return;
 
