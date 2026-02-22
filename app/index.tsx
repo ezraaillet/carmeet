@@ -51,14 +51,14 @@ export default function Home() {
 
     if (error) {
       // If profile row doesn't exist yet, they must go to profile to create it
-      router.replace("/profile");
+      router.navigate("/profile");
       return;
     }
 
     if (!data?.onboarded) {
-      router.replace("/profile");
+      router.navigate("/profile");
     } else {
-      router.replace("/map");
+      router.navigate("/map");
     }
   }
 
@@ -183,7 +183,7 @@ export default function Home() {
     if (uid) {
       await routeAfterAuth(uid);
     } else {
-      router.replace("/profile");
+      router.navigate("/profile");
     }
 
     setAuthMode(null);
