@@ -1,6 +1,6 @@
 import { MapDataProvider, useMapData } from "@/components/MapDataProvider";
 import { Pressable, Text, View } from "react-native";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs, usePathname, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -20,9 +20,11 @@ export type FriendRequest = {
 function RootLayoutInner() {
   const { refresh } = useMapData();
   const router = useRouter();
+  const pathname = usePathname();
 
   const [onboarded, setOnboarded] = useState<boolean>(false);
   const [checkingOnboard, setCheckingOnboard] = useState<boolean>(false);
+  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
 
   const [authedEmail, setAuthedEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -76,11 +78,14 @@ function RootLayoutInner() {
       setAuthedEmail(user?.email ?? null);
       setUserId(user?.id ?? null);
 
-      if (user?.id) fetchOnboarded(user.id);
-      else {
+      if (user?.id) {
+        await fetchOnboarded(user.id);
+      } else {
         setOnboarded(false);
         setCheckingOnboard(false);
       }
+
+      setCheckingAuth(false);
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -93,6 +98,8 @@ function RootLayoutInner() {
         setOnboarded(false);
         setCheckingOnboard(false);
       }
+
+      setCheckingAuth(false);
     });
 
     return () => sub.subscription.unsubscribe();
@@ -192,6 +199,21 @@ function RootLayoutInner() {
       supabase.removeChannel(channel);
     };
   }, [userId, fetchPendingRequests]);
+
+  useEffect(() => {
+    if (checkingAuth || checkingOnboard) return;
+
+    if (!userId) {
+      if (pathname === "/map") router.replace("/");
+      return;
+    }
+
+    if (!onboarded && pathname === "/map") {
+      router.replace("/profile");
+    }
+  }, [checkingAuth, checkingOnboard, userId, onboarded, pathname, router]);
+
+  const canAccessMap = !!userId && onboarded && !checkingAuth && !checkingOnboard;
 
   function openNotifications() {
     if (!userId) return;
@@ -298,10 +320,15 @@ function RootLayoutInner() {
             options={{
               title: "Map",
               tabBarLabel: "Map",
+              href: canAccessMap ? "/map" : null,
             }}
             listeners={{
               tabPress: (e) => {
-                if (!userId) return; // not signed in; Home screen should handle auth UX
+                if (!userId) {
+                  e.preventDefault();
+                  router.push("/");
+                  return;
+                }
 
                 if (checkingOnboard) {
                   e.preventDefault();
