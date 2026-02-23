@@ -170,12 +170,12 @@ export default function MapScreen() {
     if (checkingAuth || checkingOnboarded) return;
 
     if (!authed) {
-      router.replace("/");
+      router.navigate("/");
       return;
     }
 
     if (!isOnboarded) {
-      router.replace("/profile");
+      router.navigate("/profile");
     }
   }, [checkingAuth, checkingOnboarded, authed, isOnboarded, router]);
 
@@ -470,7 +470,7 @@ export default function MapScreen() {
         </Text>
 
         <Pressable
-          onPress={() => router.replace(!authed ? "/" : "/profile")}
+          onPress={() => router.navigate(!authed ? "/" : "/profile")}
           style={({ pressed }) => [
             styles.friendBtn,
             { marginTop: 16, paddingHorizontal: 18 },
