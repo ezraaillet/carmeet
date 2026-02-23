@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import s from "@/styles/profilestyles";
 import { supabase } from "../database/supabase";
 import { useMapData } from "@/components/MapDataProvider";
+import { useRouter } from "expo-router";
 
 type ProfileRow = {
   id: string;
@@ -25,9 +26,12 @@ type ProfileRow = {
   photo_url: string | null;
   location_visibility: string | null;
   created_at?: string;
+  onboarded?: boolean | null;
 };
 
 export default function ProfileScreen() {
+  const router = useRouter();
+
   const {
     myUserId,
     profilesById,
@@ -279,12 +283,19 @@ export default function ProfileScreen() {
       return;
     }
 
+    const becameOnboarded = !profile?.onboarded && !!data?.onboarded;
+
     // Update local immediately
     setProfile(data);
     setEditing(false);
 
     // Refresh provider cache so Map markers/cards use new photo/name immediately
     await refresh(myUserId);
+
+    // First-time onboarding should move user straight into Map
+    if (becameOnboarded) {
+      router.navigate("/map");
+    }
 
     setSaving(false);
   }
