@@ -26,8 +26,6 @@ export default function Home() {
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   const [authedEmail, setAuthedEmail] = useState<string | null>(null);
-  const [authedUserId, setAuthedUserId] = useState<string | null>(null);
-
   const [error, setError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<HomeTab>("friends");
@@ -51,12 +49,12 @@ export default function Home() {
 
     if (error) {
       // If profile row doesn't exist yet, they must go to profile to create it
-      router.navigate("/profile");
+      router.navigate("/profile?onboarding=1");
       return;
     }
 
     if (!data?.onboarded) {
-      router.navigate("/profile");
+      router.navigate("/profile?onboarding=1");
     } else {
       router.navigate("/map");
     }
@@ -74,13 +72,11 @@ export default function Home() {
       if (!mounted) return;
 
       setAuthedEmail(user?.email ?? null);
-      setAuthedUserId(user?.id ?? null);
       setCheckingAuth(false);
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthedEmail(session?.user?.email ?? null);
-      setAuthedUserId(session?.user?.id ?? null);
       setCheckingAuth(false);
     });
 
@@ -168,9 +164,25 @@ export default function Home() {
       return;
     }
 
-    // ✅ Confirm-email ON => session is null => no redirect yet
+    // If confirm-email is ON, signUp can return user but no session.
+    // Try direct sign in so projects with auto-confirm disabled still work.
     if (data?.user && !data?.session) {
-      setError("Check your email to confirm your account, then sign in.");
+      const { data: signInData, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
+
+      if (signInError || !signInData.user?.id) {
+        setError("Check your email to confirm your account, then sign in.");
+        setAuthMode(null);
+        setEmail("");
+        setPassword("");
+        setLoading(false);
+        return;
+      }
+
+      await routeAfterAuth(signInData.user.id);
       setAuthMode(null);
       setEmail("");
       setPassword("");
@@ -183,7 +195,7 @@ export default function Home() {
     if (uid) {
       await routeAfterAuth(uid);
     } else {
-      router.navigate("/profile");
+      router.navigate("/profile?onboarding=1");
     }
 
     setAuthMode(null);

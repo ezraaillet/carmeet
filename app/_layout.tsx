@@ -52,7 +52,7 @@ function RootLayoutInner() {
         setOnboarded(false);
         setCheckingOnboard(false);
         // if profile row missing or query blocked, safest is send to profile
-        router.navigate("/profile");
+        router.navigate("/profile?onboarding=1");
         return;
       }
 
@@ -62,7 +62,7 @@ function RootLayoutInner() {
 
       // ✅ If signed in but not onboarded, force Profile
       if (!ok) {
-        router.navigate("/profile");
+        router.navigate("/profile?onboarding=1");
       }
     },
     [router]
@@ -228,7 +228,7 @@ function RootLayoutInner() {
     }
 
     if (!onboarded && pathname === "/map") {
-      router.navigate("/profile");
+      router.navigate("/profile?onboarding=1");
     }
   }, [checkingAuth, checkingOnboard, userId, onboarded, pathname, router]);
 
@@ -356,7 +356,7 @@ function RootLayoutInner() {
 
                 if (!onboarded) {
                   e.preventDefault();
-                  router.push("/profile");
+                  router.push("/profile?onboarding=1");
                 }
               },
             }}
