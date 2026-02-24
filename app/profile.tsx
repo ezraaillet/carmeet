@@ -294,8 +294,6 @@ export default function ProfileScreen() {
       return;
     }
 
-    const becameOnboarded = !profile?.onboarded && !!data?.onboarded;
-
     // Update local immediately
     setProfile(data);
     setEditing(false);
@@ -303,10 +301,6 @@ export default function ProfileScreen() {
     // Refresh provider cache so Map markers/cards use new photo/name immediately
     await refresh(myUserId);
 
-    // First-time onboarding should move user straight into Map
-    if (becameOnboarded) {
-      router.navigate("/map");
-    }
 
     setSaving(false);
   }
