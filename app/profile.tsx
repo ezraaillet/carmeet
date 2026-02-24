@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import s from "@/styles/profilestyles";
 import { supabase } from "../database/supabase";
 import { useMapData } from "@/components/MapDataProvider";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 type ProfileRow = {
   id: string;
@@ -31,6 +31,7 @@ type ProfileRow = {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ onboarding?: string }>();
 
   const {
     myUserId,
@@ -176,6 +177,16 @@ export default function ProfileScreen() {
     };
   }, [myUserId, profilesById, refresh, ensureMyProfileExists]);
 
+  useEffect(() => {
+    if (!profile) return;
+
+    const shouldForceEdit = params.onboarding === "1" || !profile.onboarded;
+
+    if (shouldForceEdit) {
+      setEditing(true);
+    }
+  }, [params.onboarding, profile]);
+
   // -----------------------------
   // Pick + upload avatar
   // -----------------------------
@@ -308,6 +319,7 @@ export default function ProfileScreen() {
       setSigningOut(true);
       await supabase.auth.signOut();
       setProfile(null);
+      router.replace("/");
     } finally {
       setSigningOut(false);
     }
