@@ -210,15 +210,6 @@ function RootLayoutInner() {
   }, [checkingAuth, userId, pathname, fetchOnboarded]);
 
 
-  // Once onboarding is confirmed true, move users from Profile to Map
-  useEffect(() => {
-    if (checkingAuth || checkingOnboard || !userId) return;
-    if (pathname !== "/profile") return;
-    if (!onboarded) return;
-
-    router.navigate("/map");
-  }, [checkingAuth, checkingOnboard, userId, pathname, onboarded, router]);
-
   useEffect(() => {
     if (checkingAuth || checkingOnboard) return;
 
