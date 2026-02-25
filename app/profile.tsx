@@ -18,6 +18,7 @@ import s from "@/styles/profilestyles";
 import { supabase } from "../database/supabase";
 import { useMapData } from "@/components/MapDataProvider";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { hasMapProfileData } from "@/utils/profileReadiness";
 
 type ProfileRow = {
   id: string;
@@ -180,7 +181,8 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!profile) return;
 
-    const shouldForceEdit = params.onboarding === "1" || !profile.onboarded;
+    const shouldForceEdit =
+      params.onboarding === "1" || !hasMapProfileData(profile);
 
     if (shouldForceEdit) {
       setEditing(true);

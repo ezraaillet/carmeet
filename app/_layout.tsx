@@ -8,6 +8,7 @@ import NotificationsOverlay from "../components/NotificationsOverlay";
 import { colors } from "../styles/themes";
 import styles from "../styles/homestyles";
 import { supabase } from "../database/supabase";
+import { hasMapProfileData } from "@/utils/profileReadiness";
 
 export type FriendRequest = {
   id: string;
@@ -22,8 +23,8 @@ function RootLayoutInner() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [onboarded, setOnboarded] = useState<boolean>(false);
-  const [checkingOnboard, setCheckingOnboard] = useState<boolean>(false);
+  const [mapProfileReady, setMapProfileReady] = useState<boolean>(false);
+  const [checkingProfileReady, setCheckingProfileReady] = useState<boolean>(false);
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
 
   const [authedEmail, setAuthedEmail] = useState<string | null>(null);
@@ -37,31 +38,33 @@ function RootLayoutInner() {
   const [notifError, setNotifError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const fetchOnboarded = useCallback(
+  const fetchProfileReadiness = useCallback(
     async (uid: string) => {
-      setCheckingOnboard(true);
+      setCheckingProfileReady(true);
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("onboarded")
+        .select("username, display_name, location_visibility")
         .eq("id", uid)
-        .maybeSingle<{ onboarded: boolean }>();
+        .maybeSingle<{
+          username: string | null;
+          display_name: string | null;
+          location_visibility: string | null;
+        }>();
 
       if (error) {
-        console.warn("fetch onboarded error:", error.message);
-        setOnboarded(false);
-        setCheckingOnboard(false);
-        // if profile row missing or query blocked, safest is send to profile
+        console.warn("fetch profile readiness error:", error.message);
+        setMapProfileReady(false);
+        setCheckingProfileReady(false);
         router.navigate("/profile?onboarding=1");
         return;
       }
 
-      const ok = !!data?.onboarded;
-      setOnboarded(ok);
-      setCheckingOnboard(false);
+      const ready = hasMapProfileData(data);
+      setMapProfileReady(ready);
+      setCheckingProfileReady(false);
 
-      // ✅ If signed in but not onboarded, force Profile
-      if (!ok) {
+      if (!ready) {
         router.navigate("/profile?onboarding=1");
       }
     },
@@ -79,10 +82,10 @@ function RootLayoutInner() {
       setUserId(user?.id ?? null);
 
       if (user?.id) {
-        await fetchOnboarded(user.id);
+        await fetchProfileReadiness(user.id);
       } else {
-        setOnboarded(false);
-        setCheckingOnboard(false);
+        setMapProfileReady(false);
+        setCheckingProfileReady(false);
       }
 
       setCheckingAuth(false);
@@ -93,17 +96,17 @@ function RootLayoutInner() {
       setAuthedEmail(user?.email ?? null);
       setUserId(user?.id ?? null);
 
-      if (user?.id) fetchOnboarded(user.id);
+      if (user?.id) fetchProfileReadiness(user.id);
       else {
-        setOnboarded(false);
-        setCheckingOnboard(false);
+        setMapProfileReady(false);
+        setCheckingProfileReady(false);
       }
 
       setCheckingAuth(false);
     });
 
     return () => sub.subscription.unsubscribe();
-  }, [fetchOnboarded]);
+  }, [fetchProfileReadiness]);
 
   // Fetch pending requests list + count
   const fetchPendingRequests = useCallback(async () => {
@@ -152,12 +155,12 @@ function RootLayoutInner() {
     refresh(userId);
   }, [userId, fetchPendingRequests, refresh]);
 
-  // realtime profile onboard watch
+  // realtime profile readiness watch
   useEffect(() => {
     if (!userId) return;
 
     const channel = supabase
-      .channel("profile-onboarded-watch")
+      .channel("profile-readiness-watch")
       .on(
         "postgres_changes",
         {
@@ -167,8 +170,8 @@ function RootLayoutInner() {
           filter: `id=eq.${userId}`,
         },
         (payload) => {
-          const next = (payload.new as any)?.onboarded;
-          setOnboarded(!!next);
+          const next = payload.new as any;
+          setMapProfileReady(hasMapProfileData(next));
         }
       )
       .subscribe();
@@ -201,29 +204,29 @@ function RootLayoutInner() {
   }, [userId, fetchPendingRequests]);
 
 
-  // Re-check onboarding when returning to Profile so tab gating updates immediately
+  // Re-check map profile data when returning to Profile so tab gating updates immediately
   useEffect(() => {
     if (checkingAuth || !userId) return;
     if (pathname !== "/profile") return;
 
-    fetchOnboarded(userId);
-  }, [checkingAuth, userId, pathname, fetchOnboarded]);
+    fetchProfileReadiness(userId);
+  }, [checkingAuth, userId, pathname, fetchProfileReadiness]);
 
 
   useEffect(() => {
-    if (checkingAuth || checkingOnboard) return;
+    if (checkingAuth || checkingProfileReady) return;
 
     if (!userId) {
       if (pathname === "/map") router.navigate("/");
       return;
     }
 
-    if (!onboarded && pathname === "/map") {
+    if (!mapProfileReady && pathname === "/map") {
       router.navigate("/profile?onboarding=1");
     }
-  }, [checkingAuth, checkingOnboard, userId, onboarded, pathname, router]);
+  }, [checkingAuth, checkingProfileReady, userId, mapProfileReady, pathname, router]);
 
-  const canAccessMap = !!userId && onboarded && !checkingAuth && !checkingOnboard;
+  const canAccessMap = !!userId && mapProfileReady && !checkingAuth && !checkingProfileReady;
 
   function openNotifications() {
     if (!userId) return;
@@ -330,7 +333,13 @@ function RootLayoutInner() {
             options={{
               title: "Map",
               tabBarLabel: "Map",
-              href: canAccessMap ? "/map" : null,
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons
+                  name="map"
+                  size={size}
+                  color={canAccessMap ? color : colors.gunmetal}
+                />
+              ),
             }}
             listeners={{
               tabPress: (e) => {
@@ -340,12 +349,12 @@ function RootLayoutInner() {
                   return;
                 }
 
-                if (checkingOnboard) {
+                if (checkingProfileReady) {
                   e.preventDefault();
                   return;
                 }
 
-                if (!onboarded) {
+                if (!mapProfileReady) {
                   e.preventDefault();
                   router.push("/profile?onboarding=1");
                 }

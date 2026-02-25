@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import styles from "@/styles/homestyles";
 import { supabase } from "../database/supabase";
 import { useRouter } from "expo-router";
+import { hasMapProfileData } from "@/utils/profileReadiness";
 
 type HomeTab = "friends" | "meets";
 type AuthMode = "signin" | "signup" | null;
@@ -41,24 +42,22 @@ export default function Home() {
   );
 
   async function routeAfterAuth(uid: string) {
-    // If you ever decide to drop the onboarded column, swap this logic.
     const { data, error } = await supabase
       .from("profiles")
-      .select("onboarded")
+      .select("username, display_name, location_visibility")
       .eq("id", uid)
-      .maybeSingle<{ onboarded: boolean }>();
+      .maybeSingle<{
+        username: string | null;
+        display_name: string | null;
+        location_visibility: string | null;
+      }>();
 
-    if (error) {
-      // If profile row doesn't exist yet, they must go to profile to create it
+    if (error || !hasMapProfileData(data)) {
       router.navigate("/profile?onboarding=1");
       return;
     }
 
-    if (!data?.onboarded) {
-      router.navigate("/profile?onboarding=1");
-    } else {
-      router.navigate("/map");
-    }
+    router.navigate("/map");
   }
 
   // Auth tracking
