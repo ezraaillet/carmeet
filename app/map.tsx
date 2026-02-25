@@ -19,6 +19,7 @@ import { supabase } from "../database/supabase";
 import { useFocusEffect } from "@react-navigation/native";
 import { useMapData } from "@/components/MapDataProvider";
 import { useRouter } from "expo-router";
+import { hasMapProfileData } from "@/utils/profileReadiness";
 
 type LiveLoc = {
   user_id: string;
@@ -78,9 +79,8 @@ export default function MapScreen() {
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
-  // ✅ STEP 5: onboarding gate
-  const [checkingOnboarded, setCheckingOnboarded] = useState(true);
-  const [isOnboarded, setIsOnboarded] = useState<boolean>(true); // default true to avoid flicker pre-auth
+  const [checkingProfileReady, setCheckingProfileReady] = useState(true);
+  const [isProfileReady, setIsProfileReady] = useState<boolean>(true); // default true to avoid flicker pre-auth
 
   // NEW: GPS fix gate
   const [gotFix, setGotFix] = useState(false);
@@ -126,39 +126,42 @@ export default function MapScreen() {
     };
   }, []);
 
-  // ✅ STEP 5: check onboarded when auth/user changes
+  // Check whether required profile data exists when auth/user changes
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       // Not signed in: block map access
       if (!authed || !myUserId) {
-        setCheckingOnboarded(false);
-        setIsOnboarded(false);
+        setCheckingProfileReady(false);
+        setIsProfileReady(false);
         return;
       }
 
-      setCheckingOnboarded(true);
+      setCheckingProfileReady(true);
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("onboarded")
+        .select("username, display_name, location_visibility")
         .eq("id", myUserId)
-        .maybeSingle<{ onboarded: boolean }>();
+        .maybeSingle<{
+          username: string | null;
+          display_name: string | null;
+          location_visibility: string | null;
+        }>();
 
       console.log(data);
 
       if (cancelled) return;
 
       if (error) {
-        console.warn("onboarded check error:", error.message);
-        // Fail-closed: keep users off map until profile state is known
-        setIsOnboarded(false);
+        console.warn("profile readiness check error:", error.message);
+        setIsProfileReady(false);
       } else {
-        setIsOnboarded(!!data?.onboarded);
+        setIsProfileReady(hasMapProfileData(data));
       }
 
-      setCheckingOnboarded(false);
+      setCheckingProfileReady(false);
     })();
 
     return () => {
@@ -167,17 +170,17 @@ export default function MapScreen() {
   }, [authed, myUserId]);
 
   useEffect(() => {
-    if (checkingAuth || checkingOnboarded) return;
+    if (checkingAuth || checkingProfileReady) return;
 
     if (!authed) {
       router.navigate("/");
       return;
     }
 
-    if (!isOnboarded) {
+    if (!isProfileReady) {
       router.navigate("/profile");
     }
-  }, [checkingAuth, checkingOnboarded, authed, isOnboarded, router]);
+  }, [checkingAuth, checkingProfileReady, authed, isProfileReady, router]);
 
   // -------------- Permissions --------------
   useEffect(() => {
@@ -221,8 +224,7 @@ export default function MapScreen() {
   // -------------- Watch while focused --------------
   useFocusEffect(
     useCallback(() => {
-      // ✅ Don’t start location work if they aren’t onboarded
-      if (!hasPermission || !authed || !isOnboarded) return;
+      if (!hasPermission || !authed || !isProfileReady) return;
 
       let sub: Location.LocationSubscription | null = null;
       let cancelled = false;
@@ -324,7 +326,7 @@ export default function MapScreen() {
     }, [
       hasPermission,
       authed,
-      isOnboarded,
+      isProfileReady,
       upsertMyLocation,
       setMyLiveLocation,
       myUserId,
@@ -447,8 +449,8 @@ export default function MapScreen() {
     }
   }, [myUserId, selectedUserId]);
 
-  // ✅ STEP 5 UI: block map if not onboarded
-  if (checkingAuth || checkingOnboarded) {
+  // UI: block map if required profile data is missing
+  if (checkingAuth || checkingProfileReady) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />
@@ -457,7 +459,7 @@ export default function MapScreen() {
     );
   }
 
-  if (!authed || !isOnboarded) {
+  if (!authed || !isProfileReady) {
     return (
       <View style={styles.center}>
         <Text style={{ fontSize: 18, fontWeight: "700" }}>
