@@ -199,6 +199,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
   },
+  homeBodyCentered: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 0,
+  },
 
   // Top tab row
   homeTabsContainer: {

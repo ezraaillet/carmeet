@@ -64,6 +64,21 @@ const mapStyles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#222",
   },
+  clusterBubble: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clusterBubbleText: {
+    color: colors.black,
+    fontWeight: "800",
+    fontSize: 16,
+  },
   cardName: {
     fontSize: 18,
     fontWeight: "700",
