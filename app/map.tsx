@@ -468,7 +468,7 @@ export default function MapScreen() {
         <Text style={{ marginTop: 10, textAlign: "center", opacity: 0.85 }}>
           {!authed
             ? "Please sign in or create an account before using the map."
-            : "Add a username or display name and choose your location visibility before using the map."}
+            : "Add your username/photo and choose your location visibility before using the map."}
         </Text>
 
         <Pressable

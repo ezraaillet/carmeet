@@ -39,11 +39,7 @@ function RootLayoutInner() {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   const fetchProfileReadiness = useCallback(
-    async (
-      uid: string,
-      options?: { redirectIfNotReady?: boolean }
-    ): Promise<boolean> => {
-      const redirectIfNotReady = options?.redirectIfNotReady ?? true;
+    async (uid: string) => {
       setCheckingProfileReady(true);
 
       const { data, error } = await supabase
@@ -60,17 +56,15 @@ function RootLayoutInner() {
         console.warn("fetch profile readiness error:", error.message);
         setMapProfileReady(false);
         setCheckingProfileReady(false);
-        if (redirectIfNotReady) {
-          router.navigate("/profile?onboarding=1");
-        }
-        return false;
+        router.navigate("/profile?onboarding=1");
+        return;
       }
 
       const ready = hasMapProfileData(data);
       setMapProfileReady(ready);
       setCheckingProfileReady(false);
 
-      if (!ready && redirectIfNotReady) {
+      if (!ready) {
         router.navigate("/profile?onboarding=1");
       }
 
