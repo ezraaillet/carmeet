@@ -67,6 +67,8 @@ function RootLayoutInner() {
       if (!ready) {
         router.navigate("/profile?onboarding=1");
       }
+
+      return ready;
     },
     [router]
   );
@@ -356,7 +358,18 @@ function RootLayoutInner() {
 
                 if (!mapProfileReady) {
                   e.preventDefault();
-                  router.push("/profile?onboarding=1");
+
+                  void (async () => {
+                    const ready = await fetchProfileReadiness(userId, {
+                      redirectIfNotReady: false,
+                    });
+
+                    if (ready) {
+                      router.push("/map");
+                    } else {
+                      router.push("/profile?onboarding=1");
+                    }
+                  })();
                 }
               },
             }}
