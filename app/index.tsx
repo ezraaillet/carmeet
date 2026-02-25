@@ -239,7 +239,9 @@ export default function Home() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={[styles.container, { width: "100%" }]}
     >
-      <View style={styles.homeBody}>
+      <View
+        style={[styles.homeBody, !authedEmail && styles.homeBodyCentered]}
+      >
         {authedEmail ? (
           <>
             <View style={styles.homeTabsContainer}>

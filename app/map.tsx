@@ -60,6 +60,18 @@ function formatLastSeen(updatedAt?: string | null) {
   return `${d}d ago`;
 }
 
+
+function distanceInMeters(a: LiveLoc, b: LiveLoc) {
+  const avgLatRad = (((a.lat + b.lat) / 2) * Math.PI) / 180;
+  const metersPerDegLat = 111_111;
+  const metersPerDegLng = 111_111 * Math.cos(avgLatRad);
+
+  const dLat = (a.lat - b.lat) * metersPerDegLat;
+  const dLng = (a.lng - b.lng) * metersPerDegLng;
+
+  return Math.hypot(dLat, dLng);
+}
+
 export default function MapScreen() {
   console.log("MAP VERSION:", Date.now());
 
@@ -336,34 +348,90 @@ export default function MapScreen() {
   // ✅ Replace local "all" with cached locations
   const all = locationsById;
 
-  // -------------- Anti-collision (spread overlapping markers more) --------------
-  const spread = useMemo(() => {
-    const groups = new Map<string, LiveLoc[]>();
-    const round = (v: number) => Math.round(v * 1e5) / 1e5; // group by ~1 meter
+  // -------------- Cluster nearby users + anti-collision for small groups --------------
+  const mapMarkers = useMemo(() => {
+    const nearbyThresholdMeters = 40;
+    const usersWithProfiles = Object.values(all).filter(
+      (loc) => !!profilesById[loc.user_id]
+    );
 
-    Object.values(all).forEach((loc) => {
-      const key = `${round(loc.lat)}:${round(loc.lng)}`;
-      const arr = groups.get(key);
-      if (arr) arr.push(loc);
-      else groups.set(key, [loc]);
-    });
+    const visited = new Set<string>();
+    const groups: LiveLoc[][] = [];
 
-    const results: Array<{ loc: LiveLoc; adjLat: number; adjLng: number }> = [];
+    for (const loc of usersWithProfiles) {
+      if (visited.has(loc.user_id)) continue;
 
-    for (const [, arr] of groups) {
-      if (arr.length === 1) {
-        const [loc] = arr;
-        results.push({ loc, adjLat: loc.lat, adjLng: loc.lng });
-        continue;
+      const queue: LiveLoc[] = [loc];
+      const group: LiveLoc[] = [];
+      visited.add(loc.user_id);
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+        if (!current) continue;
+
+        group.push(current);
+
+        usersWithProfiles.forEach((candidate) => {
+          if (visited.has(candidate.user_id)) return;
+
+          if (distanceInMeters(current, candidate) <= nearbyThresholdMeters) {
+            visited.add(candidate.user_id);
+            queue.push(candidate);
+          }
+        });
       }
 
-      const baseRadiusMeters = 20;
-      const extraPerUser = 5;
-      const radiusMeters =
-        baseRadiusMeters + extraPerUser * Math.max(0, arr.length - 2);
+      groups.push(group);
+    }
 
-      arr.forEach((loc, i) => {
-        const angle = (2 * Math.PI * i) / arr.length;
+    const renderedMarkers: (
+      | {
+          type: "user";
+          loc: LiveLoc;
+          adjLat: number;
+          adjLng: number;
+        }
+      | {
+          type: "cluster";
+          key: string;
+          lat: number;
+          lng: number;
+          count: number;
+        }
+    )[] = [];
+
+    groups.forEach((group, groupIdx) => {
+      if (group.length > 3) {
+        const centerLat =
+          group.reduce((sum, loc) => sum + loc.lat, 0) / group.length;
+        const centerLng =
+          group.reduce((sum, loc) => sum + loc.lng, 0) / group.length;
+
+        renderedMarkers.push({
+          type: "cluster",
+          key: `cluster-${groupIdx}`,
+          lat: centerLat,
+          lng: centerLng,
+          count: group.length,
+        });
+        return;
+      }
+
+      if (group.length === 1) {
+        const [loc] = group;
+        renderedMarkers.push({
+          type: "user",
+          loc,
+          adjLat: loc.lat,
+          adjLng: loc.lng,
+        });
+        return;
+      }
+
+      const radiusMeters = 14 + 4 * (group.length - 2);
+
+      group.forEach((loc, i) => {
+        const angle = (2 * Math.PI * i) / group.length;
 
         const latRad = (loc.lat * Math.PI) / 180;
         const metersPerDegLat = 111_111;
@@ -372,16 +440,17 @@ export default function MapScreen() {
         const dx = radiusMeters * Math.cos(angle);
         const dy = radiusMeters * Math.sin(angle);
 
-        results.push({
+        renderedMarkers.push({
+          type: "user",
           loc,
           adjLat: loc.lat + dy / metersPerDegLat,
           adjLng: loc.lng + dx / metersPerDegLng,
         });
       });
-    }
+    });
 
-    return results;
-  }, [all]);
+    return renderedMarkers;
+  }, [all, profilesById]);
 
   // -------------- Load selected profile when clicking marker --------------
   const handleMarkerPress = useCallback(
@@ -537,55 +606,77 @@ export default function MapScreen() {
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
       >
-        {/* ✅ Render only markers with loaded profiles */}
-        {spread
-          .filter(({ loc }) => !!profilesById[loc.user_id])
-          .map(({ loc, adjLat, adjLng }) => {
-            const p = profilesById[loc.user_id];
-
-            const markerName =
-              p?.display_name || p?.username || loc.user_id.slice(0, 8);
-
-            const markerInitials = markerName
-              .split(" ")
-              .map((x) => x[0])
-              .join("")
-              .slice(0, 2)
-              .toUpperCase();
-
-            const fresh = isFresh(loc.updated_at, 2 * 60 * 1000);
-            const lastSeen = formatLastSeen(loc.updated_at);
-
-            // ✅ Use actual profile photo for marker
-            const markerUri = p?.photo_url ?? null;
-
+        {/* ✅ Render user markers + 3+ cluster bubbles for crowded spots */}
+        {mapMarkers.map((item) => {
+          if (item.type === "cluster") {
             return (
               <Marker
-                key={loc.user_id}
-                coordinate={{ latitude: adjLat, longitude: adjLng }}
+                key={item.key}
+                coordinate={{ latitude: item.lat, longitude: item.lng }}
                 anchor={{ x: 0.5, y: 0.5 }}
-                title={markerName}
-                description={fresh ? "Live" : `Last seen ${lastSeen}`}
-                zIndex={999}
-                onPress={() => handleMarkerPress(loc.user_id)}
+                title="Nearby group"
+                description={`${item.count} people nearby`}
+                zIndex={1000}
+                onPress={() => {
+                  setSelectedUserId(null);
+                  setSelectedProfile(null);
+                  setProfileError(null);
+                  setProfileLoading(false);
+                }}
               >
-                {markerUri ? (
-                  <Image
-                    source={{ uri: markerUri }}
-                    style={[styles.icon, { opacity: fresh ? 1 : 0.45 }]}
-                  />
-                ) : (
-                  <View
-                    style={[styles.iconInitials, { opacity: fresh ? 1 : 0.45 }]}
-                  >
-                    <Text style={{ color: "white", fontWeight: "700" }}>
-                      {markerInitials}
-                    </Text>
-                  </View>
-                )}
+                <View style={styles.clusterBubble}>
+                  <Text style={styles.clusterBubbleText}>3+</Text>
+                </View>
               </Marker>
             );
-          })}
+          }
+
+          const { loc, adjLat, adjLng } = item;
+          const p = profilesById[loc.user_id];
+
+          const markerName =
+            p?.display_name || p?.username || loc.user_id.slice(0, 8);
+
+          const markerInitials = markerName
+            .split(" ")
+            .map((x) => x[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase();
+
+          const fresh = isFresh(loc.updated_at, 2 * 60 * 1000);
+          const lastSeen = formatLastSeen(loc.updated_at);
+
+          // ✅ Use actual profile photo for marker
+          const markerUri = p?.photo_url ?? null;
+
+          return (
+            <Marker
+              key={loc.user_id}
+              coordinate={{ latitude: adjLat, longitude: adjLng }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              title={markerName}
+              description={fresh ? "Live" : `Last seen ${lastSeen}`}
+              zIndex={999}
+              onPress={() => handleMarkerPress(loc.user_id)}
+            >
+              {markerUri ? (
+                <Image
+                  source={{ uri: markerUri }}
+                  style={[styles.icon, { opacity: fresh ? 1 : 0.45 }]}
+                />
+              ) : (
+                <View
+                  style={[styles.iconInitials, { opacity: fresh ? 1 : 0.45 }]}
+                >
+                  <Text style={{ color: "white", fontWeight: "700" }}>
+                    {markerInitials}
+                  </Text>
+                </View>
+              )}
+            </Marker>
+          );
+        })}
       </MapView>
 
       {/* Small profile card overlay */}
