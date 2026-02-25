@@ -29,6 +29,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<HomeTab>("friends");
+  const [focusedField, setFocusedField] = useState<"email" | "password" | null>(null);
 
   // choose which auth flow (prevents empty signups)
   const [authMode, setAuthMode] = useState<AuthMode>(null);
@@ -283,7 +284,7 @@ export default function Home() {
         ) : (
           <>
             {authMode === null ? (
-              <View style={{ width: "90%", maxWidth: 420 }}>
+              <View style={styles.homeAuthCard}>
                 <Pressable
                   onPress={() => openAuth("signin")}
                   style={({ pressed }) => [
@@ -309,10 +310,8 @@ export default function Home() {
                 </Pressable>
               </View>
             ) : (
-              <View style={{ width: "90%", maxWidth: 420 }}>
-                <Text
-                  style={{ marginBottom: 10, fontSize: 16, fontWeight: "600" }}
-                >
+              <View style={styles.homeAuthCard}>
+                <Text style={styles.homeAuthTitle}>
                   {authMode === "signin"
                     ? "Sign in to CarMeet"
                     : "Create your CarMeet account"}
@@ -324,18 +323,30 @@ export default function Home() {
                   placeholder="Email"
                   value={email}
                   onChangeText={setEmail}
-                  style={styles.homeInput}
+                  placeholderTextColor="#8A8A8A"
+                  onFocus={() => setFocusedField("email")}
+                  onBlur={() => setFocusedField(null)}
+                  style={[
+                    styles.homeInput,
+                    focusedField === "email" && styles.homeInputFocused,
+                  ]}
                 />
                 <TextInput
                   placeholder="Password (min 6 chars)"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
-                  style={styles.homeInput}
+                  placeholderTextColor="#8A8A8A"
+                  onFocus={() => setFocusedField("password")}
+                  onBlur={() => setFocusedField(null)}
+                  style={[
+                    styles.homeInput,
+                    focusedField === "password" && styles.homeInputFocused,
+                  ]}
                 />
 
                 {error ? (
-                  <Text style={{ color: "crimson", marginTop: 8 }}>
+                  <Text style={styles.homeErrorText}>
                     {error}
                   </Text>
                 ) : null}
