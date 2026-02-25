@@ -20,9 +20,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 12,
     alignItems: "center",
-    justifyContent: "center",
-    minHeight: 48,
-    outlineWidth: 0,
   },
   buttonPressed: {
     backgroundColor: colors.primaryDark,
@@ -272,7 +269,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.gunmetal,
-    outlineWidth: 0,
   },
   homeInputFocused: {
     borderColor: colors.primary,
@@ -289,16 +285,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
     alignItems: "center",
-    justifyContent: "center",
-    minHeight: 48,
     borderWidth: 1,
     borderColor: colors.steel,
     backgroundColor: colors.gunmetal,
-    outlineWidth: 0,
   },
   homeSecondaryBtnText: {
     color: colors.offwhite,
-    fontSize: 16,
     fontWeight: "600",
   },
   homeSecondaryBtnPressed: {
