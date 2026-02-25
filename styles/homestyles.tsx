@@ -15,16 +15,17 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 20,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 20,
-    backgroundColor: "blue",
-    borderRadius: 5,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    alignItems: "center",
   },
   buttonPressed: {
-    backgroundColor: "darkblue",
+    backgroundColor: colors.primaryDark,
   },
   buttonText: {
-    color: "white",
+    color: colors.offwhite,
     fontSize: 16,
     fontWeight: "bold",
   },
@@ -239,27 +240,57 @@ const styles = StyleSheet.create({
   /* ---------------------------
      LOGIN INPUTS (shared)
   ----------------------------*/
-  homeInput: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  homeAuthCard: {
+    width: "90%",
+    maxWidth: 420,
+    backgroundColor: colors.charcoal,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  homeAuthTitle: {
     marginBottom: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ddd",
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.offwhite,
+  },
+  homeInput: {
+    backgroundColor: colors.black,
+    color: colors.offwhite,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+  },
+  homeInputFocused: {
+    borderColor: colors.primary,
+  },
+  homeErrorText: {
+    color: colors.error,
+    marginTop: 4,
+    marginBottom: 4,
   },
 
   homeSecondaryBtn: {
     marginTop: 12,
     paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#999",
-    backgroundColor: "#f7f7f7",
+    borderColor: colors.steel,
+    backgroundColor: colors.gunmetal,
   },
   homeSecondaryBtnText: {
+    color: colors.offwhite,
     fontWeight: "600",
   },
   homeSecondaryBtnPressed: {
