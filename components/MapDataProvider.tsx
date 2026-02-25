@@ -27,6 +27,7 @@ type Profile = {
   display_name: string | null;
   photo_url: string | null;
   location_visibility?: string | null;
+  onboarded?: boolean | null;
 };
 
 type MapDataState = {
@@ -139,7 +140,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           supabase
             .from("profiles")
             .select(
-              "id, username, display_name, photo_url, location_visibility"
+              "id, username, display_name, photo_url, location_visibility, onboarded"
             )
             .in("id", uniq),
         ]);
@@ -225,7 +226,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
                   const { data: p } = await supabase
                     .from("profiles")
                     .select(
-                      "id, username, display_name, photo_url, location_visibility"
+                      "id, username, display_name, photo_url, location_visibility, onboarded"
                     )
                     .eq("id", row.user_id)
                     .maybeSingle<Profile>();
