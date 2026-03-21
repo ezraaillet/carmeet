@@ -236,10 +236,110 @@ const styles = StyleSheet.create({
   homeTabContent: {
     marginTop: 6,
     padding: 12,
+    flex: 1,
   },
   homeTabContentText: {
     color: colors.offwhite,
     fontSize: 16,
+  },
+  friendsPanel: {
+    flex: 1,
+  },
+  friendsHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
+  friendsTitle: {
+    color: colors.offwhite,
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  friendsSubtitle: {
+    color: colors.silver,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  friendsRefreshButton: {
+    backgroundColor: colors.gunmetal,
+    borderWidth: 1,
+    borderColor: colors.steel,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+  },
+  friendsRefreshButtonPressed: {
+    backgroundColor: colors.steel,
+  },
+  friendsRefreshButtonText: {
+    color: colors.offwhite,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  friendsList: {
+    gap: 12,
+    paddingBottom: 20,
+  },
+  friendCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.charcoal,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    borderRadius: 18,
+    padding: 14,
+    gap: 14,
+  },
+  friendAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.gunmetal,
+  },
+  friendAvatarFallback: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primaryDark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  friendAvatarFallbackText: {
+    color: colors.offwhite,
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  friendMeta: {
+    flex: 1,
+    gap: 4,
+  },
+  friendName: {
+    color: colors.offwhite,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  friendHandle: {
+    color: colors.primaryLight,
+    fontSize: 14,
+  },
+  friendVisibility: {
+    color: colors.silver,
+    fontSize: 13,
+  },
+  friendsEmptyState: {
+    flex: 1,
+    minHeight: 220,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 24,
+  },
+  friendsEmptyTitle: {
+    color: colors.offwhite,
+    fontSize: 20,
+    fontWeight: "700",
   },
 
   /* ---------------------------

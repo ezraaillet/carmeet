@@ -1,8 +1,10 @@
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -10,6 +12,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import styles from "@/styles/homestyles";
+import { useMapData } from "@/components/MapDataProvider";
 import { supabase } from "../database/supabase";
 import { useRouter } from "expo-router";
 import { hasMapProfileData } from "@/utils/profileReadiness";
@@ -19,6 +22,7 @@ type AuthMode = "signin" | "signup" | null;
 
 export default function Home() {
   const router = useRouter();
+  const { ids, profilesById, myUserId, loading: mapLoading, refresh } = useMapData();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,6 +44,19 @@ export default function Home() {
     () => cleanEmail.length > 0 && (password ?? "").length >= 6,
     [cleanEmail, password]
   );
+  const friendProfiles = useMemo(() => {
+    if (!authedEmail || !myUserId) return [];
+
+    return ids
+      .filter((id) => id !== myUserId)
+      .map((id) => profilesById[id])
+      .filter((profile): profile is NonNullable<typeof profile> => Boolean(profile))
+      .sort((a, b) => {
+        const aName = a.display_name || a.username || "";
+        const bName = b.display_name || b.username || "";
+        return aName.localeCompare(bName);
+      });
+  }, [authedEmail, ids, myUserId, profilesById]);
 
   async function routeAfterAuth(uid: string) {
     const { data, error } = await supabase
@@ -219,6 +236,10 @@ export default function Home() {
     setPassword("");
   }
 
+  async function handleRefreshFriends() {
+    await refresh(myUserId);
+  }
+
   // ✅ Loading splash while auth is being determined
   if (checkingAuth) {
     return (
@@ -272,9 +293,84 @@ export default function Home() {
 
             <View style={styles.homeTabContent}>
               {activeTab === "friends" ? (
-                <Text style={styles.homeTabContentText}>
-                  Friends list goes here
-                </Text>
+                <View style={styles.friendsPanel}>
+                  <View style={styles.friendsHeaderRow}>
+                    <View>
+                      <Text style={styles.friendsTitle}>Your friends</Text>
+                      <Text style={styles.friendsSubtitle}>
+                        {friendProfiles.length === 0
+                          ? "Add people from the map to see them here."
+                          : `${friendProfiles.length} friend${friendProfiles.length === 1 ? "" : "s"} in your crew.`}
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      onPress={handleRefreshFriends}
+                      style={({ pressed }) => [
+                        styles.friendsRefreshButton,
+                        pressed && styles.friendsRefreshButtonPressed,
+                      ]}
+                    >
+                      <Text style={styles.friendsRefreshButtonText}>Refresh</Text>
+                    </Pressable>
+                  </View>
+
+                  {mapLoading ? (
+                    <View style={styles.friendsEmptyState}>
+                      <ActivityIndicator />
+                      <Text style={styles.homeTabContentText}>
+                        Loading friends…
+                      </Text>
+                    </View>
+                  ) : friendProfiles.length === 0 ? (
+                    <View style={styles.friendsEmptyState}>
+                      <Text style={styles.friendsEmptyTitle}>No friends yet</Text>
+                      <Text style={styles.homeTabContentText}>
+                        Once you send or accept friend requests, your list will
+                        show up here.
+                      </Text>
+                    </View>
+                  ) : (
+                    <ScrollView
+                      contentContainerStyle={styles.friendsList}
+                      showsVerticalScrollIndicator={false}
+                    >
+                      {friendProfiles.map((friend) => (
+                        <View key={friend.id} style={styles.friendCard}>
+                          {friend.photo_url ? (
+                            <Image
+                              source={{ uri: friend.photo_url }}
+                              style={styles.friendAvatar}
+                            />
+                          ) : (
+                            <View style={styles.friendAvatarFallback}>
+                              <Text style={styles.friendAvatarFallbackText}>
+                                {(friend.display_name || friend.username || "?")
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </Text>
+                            </View>
+                          )}
+
+                          <View style={styles.friendMeta}>
+                            <Text style={styles.friendName}>
+                              {friend.display_name || friend.username || "Unnamed user"}
+                            </Text>
+                            <Text style={styles.friendHandle}>
+                              {friend.username
+                                ? `@${friend.username}`
+                                : "Username coming soon"}
+                            </Text>
+                            <Text style={styles.friendVisibility}>
+                              Visibility:{" "}
+                              {friend.location_visibility || "Not configured"}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
               ) : (
                 <Text style={styles.homeTabContentText}>
                   Meets feed goes here
