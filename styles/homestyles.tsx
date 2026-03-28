@@ -590,6 +590,12 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 8,
   },
+  meetCoverImage: {
+    width: "100%",
+    height: 150,
+    borderRadius: 12,
+    backgroundColor: colors.gunmetal,
+  },
   meetHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -637,6 +643,31 @@ const styles = StyleSheet.create({
     color: colors.primaryLight,
     fontSize: 12,
     fontWeight: "600",
+  },
+  meetAttendanceButtonsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+  },
+  meetAttendanceButton: {
+    borderWidth: 1,
+    borderColor: colors.steel,
+    backgroundColor: colors.gunmetal,
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  meetAttendanceButtonSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryDark,
+  },
+  meetAttendanceButtonPressed: {
+    opacity: 0.8,
+  },
+  meetAttendanceButtonText: {
+    color: colors.offwhite,
+    fontSize: 12,
+    fontWeight: "700",
   },
   meetTagsRow: {
     flexDirection: "row",

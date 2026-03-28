@@ -45,41 +45,6 @@ function useFriendProfiles(
   }, [authedEmail, ids, myUserId, profilesById]);
 }
 
-function normalizeMeetTags(tags: unknown): string[] {
-  if (!tags) return [];
-
-  if (Array.isArray(tags)) {
-    return tags.map((tag) => String(tag).trim()).filter(Boolean);
-  }
-
-  if (typeof tags === "string") {
-    const trimmed = tags.trim();
-
-    if (!trimmed) return [];
-
-    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) {
-          return parsed.map((tag) => String(tag).trim()).filter(Boolean);
-        }
-      } catch {
-        return trimmed
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean);
-      }
-    }
-
-    return trimmed
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-  }
-
-  return [];
-}
-
 function formatMeetWhen(startTime?: string | null, endTime?: string | null) {
   if (!startTime) return "Time TBD";
 
@@ -206,6 +171,7 @@ export default function Home() {
   const [meetEndDateInput, setMeetEndDateInput] = useState<string | null>(null);
   const [meetEndTimeInput, setMeetEndTimeInput] = useState<string | null>(null);
   const [meetMaxAttendeesInput, setMeetMaxAttendeesInput] = useState("");
+  const [updatingAttendanceMeetId, setUpdatingAttendanceMeetId] = useState<string | null>(null);
 
   const meetDateOptions = useMemo(() => {
     const next14Days = Array.from({ length: 14 }, (_, idx) => {
@@ -245,8 +211,8 @@ export default function Home() {
     const fallbackLng = -122.4194;
 
     return {
-      latitude: myLocation?.latitude ?? fallbackLat,
-      longitude: myLocation?.longitude ?? fallbackLng,
+      latitude: myLocation?.lat ?? fallbackLat,
+      longitude: myLocation?.lng ?? fallbackLng,
       latitudeDelta: 0.08,
       longitudeDelta: 0.08,
     };
@@ -261,16 +227,11 @@ export default function Home() {
 
   const meetCards = useMemo(() => {
     return meets.map((meet) => {
-      const tags = normalizeMeetTags(meet.tags);
-      const summary = meetAttendeeSummaryByMeetId[meet.id] ?? {
-        total: 0,
-        confirmed: 0,
-      };
+      const summary = meetAttendeeSummaryByMeetId[meet.id] ?? { going: 0 };
       const attendance = myMeetAttendanceByMeetId[meet.id] ?? null;
 
       return {
         ...meet,
-        tags,
         summary,
         attendance,
       };
@@ -548,15 +509,14 @@ export default function Home() {
           title,
           location_name: locationName || "Pinned location",
           address: locationName || null,
-          latitude: meetLocationPin?.latitude ?? null,
-          longitude: meetLocationPin?.longitude ?? null,
+          latitude: meetLocationPin.latitude,
+          longitude: meetLocationPin.longitude,
           description: description || null,
           start_time: parsedStart,
           end_time: parsedEnd,
           max_attendees: maxAttendees,
           created_by: myUserId,
           is_public: true,
-          status: "upcoming",
         })
         .select("id")
         .single<{ id: string }>();
@@ -568,7 +528,7 @@ export default function Home() {
       await supabase.from("meet_attendees").insert({
         meet_id: createdMeet.id,
         user_id: myUserId,
-        status: "host",
+        status: "going",
       });
 
       await refreshMeets(myUserId);
@@ -595,13 +555,27 @@ export default function Home() {
           onPress: async () => {
             try {
               setRemovingFriendId(friend.id);
+              const canonicalPair = [myUserId, friend.id].sort();
+
+              const { data: friendshipRows, error: friendshipLookupError } = await supabase
+                .from("friendships")
+                .select("id")
+                .eq("status", "accepted")
+                .or(
+                  `and(user_id.eq.${myUserId},friend_id.eq.${friend.id}),and(user_id.eq.${friend.id},friend_id.eq.${myUserId}),and(canonical_a.eq.${canonicalPair[0]},canonical_b.eq.${canonicalPair[1]})`
+                );
+
+              if (friendshipLookupError) throw friendshipLookupError;
+
+              const friendshipIds = (friendshipRows ?? []).map((row) => row.id).filter(Boolean);
+              if (friendshipIds.length === 0) {
+                throw new Error("Friendship not found.");
+              }
+
               const { error: deleteError } = await supabase
                 .from("friendships")
                 .delete()
-                .eq("status", "accepted")
-                .or(
-                  `and(user_id.eq.${myUserId},friend_id.eq.${friend.id}),and(user_id.eq.${friend.id},friend_id.eq.${myUserId})`
-                );
+                .in("id", friendshipIds);
 
               if (deleteError) throw deleteError;
 
@@ -622,6 +596,44 @@ export default function Home() {
         },
       ]
     );
+  }
+
+  async function handleSetAttendance(
+    meetId: string,
+    nextStatus: "going" | "interested" | null
+  ) {
+    if (!myUserId || updatingAttendanceMeetId) return;
+
+    try {
+      setUpdatingAttendanceMeetId(meetId);
+
+      if (nextStatus === null) {
+        const { error } = await supabase
+          .from("meet_attendees")
+          .delete()
+          .eq("meet_id", meetId)
+          .eq("user_id", myUserId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("meet_attendees").upsert(
+          {
+            meet_id: meetId,
+            user_id: myUserId,
+            status: nextStatus,
+          },
+          {
+            onConflict: "meet_id,user_id",
+          }
+        );
+        if (error) throw error;
+      }
+
+      await refreshMeets(myUserId);
+    } catch (err: any) {
+      Alert.alert("Could not update attendance", err?.message ?? "Please try again.");
+    } finally {
+      setUpdatingAttendanceMeetId(null);
+    }
   }
 
   const renderFriendAvatar = (friend: FriendProfile, large = false) => {
@@ -849,6 +861,13 @@ export default function Home() {
                       >
                         {meetCards.map((meet) => (
                           <View key={meet.id} style={styles.meetCard}>
+                            {!!meet.cover_image_url && (
+                              <Image
+                                source={{ uri: meet.cover_image_url }}
+                                style={styles.meetCoverImage}
+                              />
+                            )}
+
                             <View style={styles.meetHeaderRow}>
                               <Text style={styles.meetTitle}>
                                 {meet.title || "Untitled meet"}
@@ -874,7 +893,7 @@ export default function Home() {
 
                             <View style={styles.meetMetaRow}>
                               <Text style={styles.meetMetaText}>
-                                {meet.summary.confirmed} confirmed · {meet.summary.total} attending
+                                {meet.summary.going} going
                               </Text>
                               {!!meet.max_attendees && (
                                 <Text style={styles.meetMetaText}>
@@ -889,15 +908,45 @@ export default function Home() {
                               </Text>
                             )}
 
-                            {meet.tags.length > 0 && (
-                              <View style={styles.meetTagsRow}>
-                                {meet.tags.map((tag) => (
-                                  <View key={`${meet.id}-${tag}`} style={styles.meetTagPill}>
-                                    <Text style={styles.meetTagPillText}>#{tag}</Text>
-                                  </View>
-                                ))}
-                              </View>
-                            )}
+                            <View style={styles.meetAttendanceButtonsRow}>
+                              <Pressable
+                                disabled={updatingAttendanceMeetId === meet.id}
+                                onPress={() =>
+                                  handleSetAttendance(
+                                    meet.id,
+                                    meet.attendance === "going" ? null : "going"
+                                  )
+                                }
+                                style={({ pressed }) => [
+                                  styles.meetAttendanceButton,
+                                  meet.attendance === "going" &&
+                                    styles.meetAttendanceButtonSelected,
+                                  pressed && styles.meetAttendanceButtonPressed,
+                                ]}
+                              >
+                                <Text style={styles.meetAttendanceButtonText}>Going</Text>
+                              </Pressable>
+
+                              <Pressable
+                                disabled={updatingAttendanceMeetId === meet.id}
+                                onPress={() =>
+                                  handleSetAttendance(
+                                    meet.id,
+                                    meet.attendance === "interested" ? null : "interested"
+                                  )
+                                }
+                                style={({ pressed }) => [
+                                  styles.meetAttendanceButton,
+                                  meet.attendance === "interested" &&
+                                    styles.meetAttendanceButtonSelected,
+                                  pressed && styles.meetAttendanceButtonPressed,
+                                ]}
+                              >
+                                <Text style={styles.meetAttendanceButtonText}>
+                                  Interested
+                                </Text>
+                              </Pressable>
+                            </View>
                           </View>
                         ))}
                       </ScrollView>
