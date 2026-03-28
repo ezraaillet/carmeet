@@ -125,6 +125,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
   >({});
 
   const didSubscribeRef = useRef(false);
+  const didSubscribeMeetsRef = useRef(false);
 
   const fetchFriendIds = useCallback(async (uid: string) => {
     const { data, error } = await supabase
@@ -350,6 +351,36 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
             .subscribe();
 
           void channel;
+        }
+
+        if (!didSubscribeMeetsRef.current) {
+          didSubscribeMeetsRef.current = true;
+
+          const meetsChannel = supabase
+            .channel("public:meets-watch")
+            .on(
+              "postgres_changes",
+              { event: "*", schema: "public", table: "meets" },
+              () => {
+                if (!uid) return;
+                void fetchMeets(uid);
+              }
+            )
+            .on(
+              "postgres_changes",
+              { event: "*", schema: "public", table: "meet_attendees" },
+              (payload) => {
+                if (!uid) return;
+                const next = payload.new as { user_id?: string | null } | null;
+                const prev = payload.old as { user_id?: string | null } | null;
+                if (next?.user_id === uid || prev?.user_id === uid) {
+                  void fetchMeets(uid);
+                }
+              }
+            )
+            .subscribe();
+
+          void meetsChannel;
         }
 
         const perm = await Location.getForegroundPermissionsAsync();
