@@ -18,7 +18,7 @@ import styles from "@/styles/homestyles";
 import { useMapData } from "@/components/MapDataProvider";
 import { supabase } from "../database/supabase";
 import { useRouter } from "expo-router";
-import { hasMapProfileData } from "@/utils/profileReadiness";
+import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
 
 type HomeTab = "friends" | "meets";
 type AuthMode = "signin" | "signup" | null;
@@ -270,20 +270,7 @@ export default function Home() {
   const hasMeetFilters = Boolean(meetSearchTitleInput.trim() || meetSearchDateInput);
 
   async function routeAfterAuth(uid: string) {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("username, display_name, location_visibility")
-      .eq("id", uid)
-      .maybeSingle<{
-        username: string | null;
-        display_name: string | null;
-        location_visibility: string | null;
-      }>();
-
-    if (error || !hasMapProfileData(data)) {
-      router.navigate("/profile?onboarding=1");
-      return;
-    }
+    await ensureMinimalProfileExists(uid, cleanEmail || null);
 
     router.navigate("/map");
   }
@@ -634,6 +621,32 @@ export default function Home() {
     nextStatus: "going" | "interested" | null
   ) {
     if (!myUserId || updatingAttendanceMeetId) return;
+    if (nextStatus !== null) {
+      const myProfile = myUserId ? profilesById[myUserId] : null;
+      const readyFromCache = hasMapProfileData(myProfile);
+      let ready = readyFromCache;
+
+      if (!ready) {
+        try {
+          const profile = await ensureMinimalProfileExists(myUserId, authedEmail);
+          ready = hasMapProfileData(profile);
+        } catch {
+          ready = false;
+        }
+      }
+
+      if (!ready) {
+        Alert.alert(
+          "Complete your profile",
+          "Finish your profile before marking yourself as going or interested.",
+          [
+            { text: "Not now", style: "cancel" },
+            { text: "Go to Profile", onPress: () => router.push("/profile?onboarding=1") },
+          ]
+        );
+        return;
+      }
+    }
 
     try {
       setUpdatingAttendanceMeetId(meetId);
