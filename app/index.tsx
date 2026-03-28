@@ -202,6 +202,9 @@ export default function Home() {
     latitude: number;
     longitude: number;
   } | null>(null);
+  const [meetEndDateInput, setMeetEndDateInput] = useState<string | null>(null);
+  const [meetEndTimeInput, setMeetEndTimeInput] = useState<string | null>(null);
+  const [meetMaxAttendeesInput, setMeetMaxAttendeesInput] = useState("");
 
   const meetDateOptions = useMemo(() => {
     const next14Days = Array.from({ length: 14 }, (_, idx) => {
@@ -463,6 +466,9 @@ export default function Home() {
     setMeetStartInput("");
     setMeetDateInput(null);
     setMeetTimeInput(null);
+    setMeetEndDateInput(null);
+    setMeetEndTimeInput(null);
+    setMeetMaxAttendeesInput("");
     setMeetLocationPin(null);
     setCreateMeetVisible(true);
   }
@@ -480,17 +486,22 @@ export default function Home() {
     const description = meetDescriptionInput.trim();
     const composedStartInput =
       meetDateInput && meetTimeInput ? `${meetDateInput} ${meetTimeInput}` : meetStartInput;
+    const composedEndInput =
+      meetEndDateInput && meetEndTimeInput ? `${meetEndDateInput} ${meetEndTimeInput}` : "";
     const parsedStart = parseMeetDateInput(composedStartInput);
+    const parsedEnd = parseMeetDateInput(composedEndInput);
+    const parsedMaxAttendees = Number.parseInt(meetMaxAttendeesInput.trim(), 10);
+    const maxAttendees = Number.isFinite(parsedMaxAttendees) ? parsedMaxAttendees : null;
 
     if (!title) {
       Alert.alert("Meet title required", "Add a title to create your meet.");
       return;
     }
 
-    if (!locationName && !meetLocationPin) {
+    if (!locationName || !meetLocationPin) {
       Alert.alert(
         "Location required",
-        "Type an address/location name or drop a pin on the map."
+        "Type an address/location name and drop a pin on the map."
       );
       return;
     }
@@ -499,6 +510,30 @@ export default function Home() {
       Alert.alert(
         "Start time required",
         "Pick a date and time for when the meet starts."
+      );
+      return;
+    }
+
+    if (!meetEndDateInput || !meetEndTimeInput || !parsedEnd) {
+      Alert.alert(
+        "End time required",
+        "Pick a date and time for when the meet ends."
+      );
+      return;
+    }
+
+    if (new Date(parsedEnd).getTime() <= new Date(parsedStart).getTime()) {
+      Alert.alert(
+        "End time must be later",
+        "Choose an end time that is after the start time."
+      );
+      return;
+    }
+
+    if (!maxAttendees || maxAttendees < 1) {
+      Alert.alert(
+        "Max attendees required",
+        "Enter a max attendee limit of at least 1."
       );
       return;
     }
@@ -516,6 +551,8 @@ export default function Home() {
           longitude: meetLocationPin?.longitude ?? null,
           description: description || null,
           start_time: parsedStart,
+          end_time: parsedEnd,
+          max_attendees: maxAttendees,
           created_by: myUserId,
           is_public: true,
           status: "upcoming",
@@ -535,6 +572,7 @@ export default function Home() {
 
       await refresh(myUserId);
       setCreateMeetVisible(false);
+      setActiveTab("meets");
     } catch (err: any) {
       Alert.alert("Could not create meet", err?.message ?? "Please try again.");
     } finally {
@@ -1070,7 +1108,78 @@ export default function Home() {
               })}
             </ScrollView>
 
-            <Text style={styles.createMeetFieldLabel}>Pick a spot on the map (optional)</Text>
+            <Text style={styles.createMeetFieldLabel}>End date</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.createMeetChipRow}
+            >
+              {meetDateOptions.map((option) => {
+                const selected = meetEndDateInput === option;
+                return (
+                  <Pressable
+                    key={`end-date-${option}`}
+                    onPress={() => setMeetEndDateInput(option)}
+                    style={({ pressed }) => [
+                      styles.createMeetChip,
+                      selected && styles.createMeetChipSelected,
+                      pressed && styles.createMeetChipPressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.createMeetChipText,
+                        selected && styles.createMeetChipTextSelected,
+                      ]}
+                    >
+                      {formatMeetDateLabel(option)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Text style={styles.createMeetFieldLabel}>End time</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.createMeetChipRow}
+            >
+              {meetTimeOptions.map((option) => {
+                const selected = meetEndTimeInput === option;
+                return (
+                  <Pressable
+                    key={`end-time-${option}`}
+                    onPress={() => setMeetEndTimeInput(option)}
+                    style={({ pressed }) => [
+                      styles.createMeetChip,
+                      selected && styles.createMeetChipSelected,
+                      pressed && styles.createMeetChipPressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.createMeetChipText,
+                        selected && styles.createMeetChipTextSelected,
+                      ]}
+                    >
+                      {formatMeetTimeLabel(option)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <TextInput
+              placeholder="Max attendees"
+              placeholderTextColor="#8A8A8A"
+              style={styles.homeInput}
+              keyboardType="number-pad"
+              value={meetMaxAttendeesInput}
+              onChangeText={setMeetMaxAttendeesInput}
+            />
+
+            <Text style={styles.createMeetFieldLabel}>Pick a spot on the map (required for map pin)</Text>
             <MapView
               style={styles.createMeetMap}
               initialRegion={meetInitialRegion}
