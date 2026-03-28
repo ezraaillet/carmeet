@@ -482,11 +482,19 @@ const styles = StyleSheet.create({
   createMeetModalCard: {
     width: "100%",
     maxWidth: 420,
+    maxHeight: "86%",
     backgroundColor: colors.charcoal,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.gunmetal,
-    padding: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  createMeetModalScroll: {
+    width: "100%",
+  },
+  createMeetModalContent: {
+    paddingBottom: 8,
   },
   createMeetModalTitle: {
     color: colors.offwhite,
