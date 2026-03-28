@@ -12,13 +12,13 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import s from "@/styles/profilestyles";
 import { supabase } from "../database/supabase";
 import { useMapData } from "@/components/MapDataProvider";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { hasMapProfileData } from "@/utils/profileReadiness";
+import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
 
 type ProfileRow = {
   id: string;
@@ -86,42 +86,6 @@ export default function ProfileScreen() {
     };
   }, []);
 
-  // Helper: ensure a profile row exists for the current user (only if missing)
-  const ensureMyProfileExists = useCallback(async (uid: string) => {
-    // Try fetch just my row
-    const { data, error: selErr } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", uid)
-      .maybeSingle<ProfileRow>();
-
-    if (selErr) throw selErr;
-
-    if (data) return data;
-
-    // Create one if missing
-    const { data: authRes } = await supabase.auth.getUser();
-    const userEmail = authRes.user?.email ?? null;
-
-    const insertPayload = {
-      id: uid,
-      username: userEmail ? userEmail.split("@")[0] : null,
-      display_name: null,
-      photo_url: null,
-      location_visibility: "everyone",
-    };
-
-    const { data: inserted, error: insErr } = await supabase
-      .from("profiles")
-      .insert(insertPayload)
-      .select("*")
-      .single<ProfileRow>();
-
-    if (insErr) throw insErr;
-
-    return inserted;
-  }, []);
-
   // 1) Prefer cached profile from provider
   // 2) If missing, ensure it exists in DB then refresh provider cache
   useEffect(() => {
@@ -153,7 +117,7 @@ export default function ProfileScreen() {
       // Otherwise: create/fetch just my profile row, then refresh provider cache
       try {
         setLoadingLocal(true);
-        const row = await ensureMyProfileExists(myUserId);
+        const row = (await ensureMinimalProfileExists(myUserId)) as ProfileRow;
 
         if (cancelled) return;
 
@@ -176,7 +140,7 @@ export default function ProfileScreen() {
     return () => {
       cancelled = true;
     };
-  }, [myUserId, profilesById, refresh, ensureMyProfileExists]);
+  }, [myUserId, profilesById, refresh]);
 
   useEffect(() => {
     if (!profile) return;

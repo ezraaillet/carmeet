@@ -3,6 +3,7 @@ export type MapProfileFields = {
   username?: string | null;
   display_name?: string | null;
   location_visibility?: string | null;
+  photo_url?: string | null;
 };
 
 export function hasMapProfileData(profile: MapProfileFields | null | undefined) {
@@ -27,7 +28,7 @@ export async function ensureMinimalProfileExists(
 
   const { data, error: selectError } = await supabase
     .from("profiles")
-    .select("id, username, display_name, location_visibility")
+    .select("id, username, display_name, location_visibility, photo_url")
     .eq("id", uid)
     .maybeSingle<MapProfileFields>();
 
@@ -52,15 +53,23 @@ export async function ensureMinimalProfileExists(
     photo_url: null,
   };
 
-  const { data: inserted, error: insertError } = await supabase
+  const { error: insertError } = await supabase
     .from("profiles")
-    .insert(payload)
-    .select("id, username, display_name, location_visibility")
-    .single<MapProfileFields>();
+    .upsert(payload, { onConflict: "id", ignoreDuplicates: true });
 
   if (insertError) {
     throw insertError;
   }
 
-  return inserted;
+  const { data: ensured, error: ensuredError } = await supabase
+    .from("profiles")
+    .select("id, username, display_name, location_visibility, photo_url")
+    .eq("id", uid)
+    .single<MapProfileFields>();
+
+  if (ensuredError) {
+    throw ensuredError;
+  }
+
+  return ensured;
 }

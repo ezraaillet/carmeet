@@ -127,6 +127,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
     Record<string, MeetAttendeeSummary>
   >({});
   const currentUserIdRef = useRef<string | null>(null);
+  const refreshSeqRef = useRef(0);
 
   const didSubscribeRef = useRef(false);
   const didSubscribeMeetsRef = useRef(false);
@@ -263,6 +264,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(
     async (uidOverride?: string | null) => {
+      const requestId = ++refreshSeqRef.current;
       const loadForIds = async (idsToLoad: string[]) => {
         if (!idsToLoad.length) return;
 
@@ -283,6 +285,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
 
         if (locErr) throw locErr;
         if (profErr) throw profErr;
+        if (refreshSeqRef.current !== requestId) return;
 
         const profMap: Record<string, Profile> = {};
         (profRows ?? []).forEach((p: any) => (profMap[p.id] = p as Profile));
@@ -309,24 +312,32 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           uid = auth.user?.id ?? null;
         }
 
+        if (refreshSeqRef.current !== requestId) return;
+
+        const previousUid = currentUserIdRef.current;
         setMyUserId(uid);
         currentUserIdRef.current = uid;
 
-        if (!uid) {
+        if (previousUid !== uid) {
           setIds([]);
           setProfilesById({});
           setLocationsById({});
           setMeets([]);
           setMyMeetAttendanceByMeetId({});
           setMeetAttendeeSummaryByMeetId({});
+        }
+
+        if (!uid) {
           return;
         }
 
         const friendIds = await fetchFriendIds(uid);
+        if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
         const baseIds = Array.from(new Set([uid, ...friendIds]));
         setIds(baseIds);
 
         await Promise.all([loadForIds(baseIds), fetchMeets(uid)]);
+        if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
 
         if (!didSubscribeRef.current) {
           didSubscribeRef.current = true;
@@ -402,6 +413,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           const myLng = pos.coords.longitude;
 
           const nearbyIds = await fetchNearbyUserIds(myLat, myLng, 1609.34);
+          if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
           const combined = Array.from(new Set([...baseIds, ...nearbyIds]));
           setIds(combined);
 
