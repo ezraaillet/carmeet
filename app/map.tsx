@@ -1,4 +1,5 @@
 import * as Location from "expo-location";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ActivityIndicator,
@@ -18,7 +19,6 @@ import MapView, {
   PROVIDER_GOOGLE,
   Region,
 } from "react-native-maps";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "@/styles/mapstyles";
 import { supabase } from "../database/supabase";
