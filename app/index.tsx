@@ -173,6 +173,7 @@ export default function Home() {
     myMeetAttendanceByMeetId,
     meetAttendeeSummaryByMeetId,
     refresh,
+    refreshMeets,
   } = useMapData();
 
   const [email, setEmail] = useState("");
@@ -570,7 +571,7 @@ export default function Home() {
         status: "host",
       });
 
-      await refresh(myUserId);
+      await refreshMeets(myUserId);
       setCreateMeetVisible(false);
       setActiveTab("meets");
     } catch (err: any) {
@@ -1025,57 +1026,62 @@ export default function Home() {
             style={styles.createMeetModalCard}
             onPress={(event) => event.stopPropagation()}
           >
-            <Text style={styles.createMeetModalTitle}>Create a meet</Text>
-            <Text style={styles.createMeetModalSubtitle}>
-              Share it publicly so your crew can join.
-            </Text>
-
-            <TextInput
-              placeholder="Meet title"
-              placeholderTextColor="#8A8A8A"
-              style={styles.homeInput}
-              value={meetTitleInput}
-              onChangeText={setMeetTitleInput}
-            />
-
-            <TextInput
-              placeholder="Address or location name"
-              placeholderTextColor="#8A8A8A"
-              style={styles.homeInput}
-              value={meetLocationInput}
-              onChangeText={setMeetLocationInput}
-            />
-
-            <Text style={styles.createMeetFieldLabel}>Start date</Text>
             <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.createMeetChipRow}
+              style={styles.createMeetModalScroll}
+              contentContainerStyle={styles.createMeetModalContent}
+              showsVerticalScrollIndicator={false}
             >
-              {meetDateOptions.map((option) => {
-                const selected = meetDateInput === option;
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => setMeetDateInput(option)}
-                    style={({ pressed }) => [
-                      styles.createMeetChip,
-                      selected && styles.createMeetChipSelected,
-                      pressed && styles.createMeetChipPressed,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.createMeetChipText,
-                        selected && styles.createMeetChipTextSelected,
+              <Text style={styles.createMeetModalTitle}>Create a meet</Text>
+              <Text style={styles.createMeetModalSubtitle}>
+                Share it publicly so your crew can join.
+              </Text>
+
+              <TextInput
+                placeholder="Meet title"
+                placeholderTextColor="#8A8A8A"
+                style={styles.homeInput}
+                value={meetTitleInput}
+                onChangeText={setMeetTitleInput}
+              />
+
+              <TextInput
+                placeholder="Address or location name"
+                placeholderTextColor="#8A8A8A"
+                style={styles.homeInput}
+                value={meetLocationInput}
+                onChangeText={setMeetLocationInput}
+              />
+
+              <Text style={styles.createMeetFieldLabel}>Start date</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.createMeetChipRow}
+              >
+                {meetDateOptions.map((option) => {
+                  const selected = meetDateInput === option;
+                  return (
+                    <Pressable
+                      key={option}
+                      onPress={() => setMeetDateInput(option)}
+                      style={({ pressed }) => [
+                        styles.createMeetChip,
+                        selected && styles.createMeetChipSelected,
+                        pressed && styles.createMeetChipPressed,
                       ]}
                     >
-                      {formatMeetDateLabel(option)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+                      <Text
+                        style={[
+                          styles.createMeetChipText,
+                          selected && styles.createMeetChipTextSelected,
+                        ]}
+                      >
+                        {formatMeetDateLabel(option)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
 
             <Text style={styles.createMeetFieldLabel}>Start time</Text>
             <ScrollView
@@ -1203,34 +1209,35 @@ export default function Home() {
               textAlignVertical="top"
             />
 
-            <View style={styles.createMeetActionsRow}>
-              <Pressable
-                onPress={closeCreateMeetModal}
-                disabled={creatingMeet}
-                style={({ pressed }) => [
-                  styles.homeSecondaryBtn,
-                  styles.createMeetActionButton,
-                  pressed && !creatingMeet && styles.homeSecondaryBtnPressed,
-                ]}
-              >
-                <Text style={styles.homeSecondaryBtnText}>Cancel</Text>
-              </Pressable>
+              <View style={styles.createMeetActionsRow}>
+                <Pressable
+                  onPress={closeCreateMeetModal}
+                  disabled={creatingMeet}
+                  style={({ pressed }) => [
+                    styles.homeSecondaryBtn,
+                    styles.createMeetActionButton,
+                    pressed && !creatingMeet && styles.homeSecondaryBtnPressed,
+                  ]}
+                >
+                  <Text style={styles.homeSecondaryBtnText}>Cancel</Text>
+                </Pressable>
 
-              <Pressable
-                onPress={handleCreateMeet}
-                disabled={creatingMeet}
-                style={({ pressed }) => [
-                  styles.button,
-                  styles.createMeetActionButton,
-                  creatingMeet && { opacity: 0.6 },
-                  pressed && !creatingMeet && styles.buttonPressed,
-                ]}
-              >
-                <Text style={styles.buttonText}>
-                  {creatingMeet ? "Creating..." : "Create"}
-                </Text>
-              </Pressable>
-            </View>
+                <Pressable
+                  onPress={handleCreateMeet}
+                  disabled={creatingMeet}
+                  style={({ pressed }) => [
+                    styles.button,
+                    styles.createMeetActionButton,
+                    creatingMeet && { opacity: 0.6 },
+                    pressed && !creatingMeet && styles.buttonPressed,
+                  ]}
+                >
+                  <Text style={styles.buttonText}>
+                    {creatingMeet ? "Creating..." : "Create"}
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>

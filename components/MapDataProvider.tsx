@@ -71,6 +71,7 @@ type MapDataState = {
   myMeetAttendanceByMeetId: Record<string, string>;
   meetAttendeeSummaryByMeetId: Record<string, MeetAttendeeSummary>;
   refresh: (uidOverride?: string | null) => Promise<void>;
+  refreshMeets: (uidOverride?: string | null) => Promise<void>;
   setMyLiveLocation: (loc: LiveLoc) => void;
 };
 
@@ -123,6 +124,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
   const [meetAttendeeSummaryByMeetId, setMeetAttendeeSummaryByMeetId] = useState<
     Record<string, MeetAttendeeSummary>
   >({});
+  const currentUserIdRef = useRef<string | null>(null);
 
   const didSubscribeRef = useRef(false);
   const didSubscribeMeetsRef = useRef(false);
@@ -304,6 +306,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         }
 
         setMyUserId(uid);
+        currentUserIdRef.current = uid;
 
         if (!uid) {
           setIds([]);
@@ -362,19 +365,21 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
               "postgres_changes",
               { event: "*", schema: "public", table: "meets" },
               () => {
-                if (!uid) return;
-                void fetchMeets(uid);
+                const activeUid = currentUserIdRef.current;
+                if (!activeUid) return;
+                void fetchMeets(activeUid);
               }
             )
             .on(
               "postgres_changes",
               { event: "*", schema: "public", table: "meet_attendees" },
               (payload) => {
-                if (!uid) return;
+                const activeUid = currentUserIdRef.current;
+                if (!activeUid) return;
                 const next = payload.new as { user_id?: string | null } | null;
                 const prev = payload.old as { user_id?: string | null } | null;
-                if (next?.user_id === uid || prev?.user_id === uid) {
-                  void fetchMeets(uid);
+                if (next?.user_id === activeUid || prev?.user_id === activeUid) {
+                  void fetchMeets(activeUid);
                 }
               }
             )
@@ -408,6 +413,22 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
     [fetchFriendIds, fetchMeets, fetchNearbyUserIds]
   );
 
+  const refreshMeets = useCallback(
+    async (uidOverride?: string | null) => {
+      const uid = uidOverride ?? currentUserIdRef.current;
+      if (!uid) {
+        setMeets([]);
+        setMyMeetAttendanceByMeetId({});
+        setMeetAttendeeSummaryByMeetId({});
+        return;
+      }
+
+      currentUserIdRef.current = uid;
+      await fetchMeets(uid);
+    },
+    [fetchMeets]
+  );
+
   const setMyLiveLocation = useCallback((loc: LiveLoc) => {
     setLocationsById((prev) => ({ ...prev, [loc.user_id]: loc }));
   }, []);
@@ -424,6 +445,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       myMeetAttendanceByMeetId,
       meetAttendeeSummaryByMeetId,
       refresh,
+      refreshMeets,
       setMyLiveLocation,
     }),
     [
@@ -437,6 +459,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       myMeetAttendanceByMeetId,
       meetAttendeeSummaryByMeetId,
       refresh,
+      refreshMeets,
       setMyLiveLocation,
     ]
   );
