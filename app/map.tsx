@@ -2,6 +2,7 @@ import * as Location from "expo-location";
 
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
@@ -17,7 +18,7 @@ import { supabase } from "../database/supabase";
 import { useFocusEffect } from "@react-navigation/native";
 import { useMapData } from "@/components/MapDataProvider";
 import { useRouter } from "expo-router";
-import { hasMapProfileData } from "@/utils/profileReadiness";
+import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
 
 type LiveLoc = {
   user_id: string;
@@ -132,7 +133,7 @@ export default function MapScreen() {
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   const [checkingProfileReady, setCheckingProfileReady] = useState(true);
-  const [isProfileReady, setIsProfileReady] = useState<boolean>(true);
+  const [, setIsProfileReady] = useState<boolean>(true);
 
   const [gotFix, setGotFix] = useState(false);
 
@@ -189,22 +190,13 @@ export default function MapScreen() {
 
       setCheckingProfileReady(true);
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("username, display_name, location_visibility")
-        .eq("id", myUserId)
-        .maybeSingle<{
-          username: string | null;
-          display_name: string | null;
-          location_visibility: string | null;
-        }>();
-
-      if (cancelled) return;
-
-      if (error) {
+      try {
+        const profile = await ensureMinimalProfileExists(myUserId);
+        if (cancelled) return;
+        setIsProfileReady(hasMapProfileData(profile));
+      } catch {
+        if (cancelled) return;
         setIsProfileReady(false);
-      } else {
-        setIsProfileReady(hasMapProfileData(data));
       }
 
       setCheckingProfileReady(false);
@@ -216,17 +208,11 @@ export default function MapScreen() {
   }, [authed, myUserId]);
 
   useEffect(() => {
-    if (checkingAuth || checkingProfileReady) return;
-
+    if (checkingAuth) return;
     if (!authed) {
       router.navigate("/");
-      return;
     }
-
-    if (!isProfileReady) {
-      router.navigate("/profile");
-    }
-  }, [checkingAuth, checkingProfileReady, authed, isProfileReady, router]);
+  }, [checkingAuth, authed, router]);
 
   useEffect(() => {
     (async () => {
@@ -264,7 +250,7 @@ export default function MapScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!hasPermission || !authed || !isProfileReady) return;
+      if (!hasPermission || !authed) return;
 
       let sub: Location.LocationSubscription | null = null;
       let cancelled = false;
@@ -364,7 +350,6 @@ export default function MapScreen() {
     }, [
       hasPermission,
       authed,
-      isProfileReady,
       upsertMyLocation,
       setMyLiveLocation,
       myUserId,
@@ -531,9 +516,41 @@ export default function MapScreen() {
     setProfileLoading(false);
   };
 
+  const promptCompleteProfile = useCallback(() => {
+    Alert.alert(
+      "Complete your profile",
+      "Finish your profile to add friends and interact with meets.",
+      [
+        { text: "Not now", style: "cancel" },
+        { text: "Go to Profile", onPress: () => router.push("/profile?onboarding=1") },
+      ]
+    );
+  }, [router]);
+
+  const canUseProfileGatedActions = useCallback(async () => {
+    if (!myUserId) return false;
+
+    try {
+      const profile = await ensureMinimalProfileExists(myUserId);
+      const ready = hasMapProfileData(profile);
+      setIsProfileReady(ready);
+
+      if (!ready) {
+        promptCompleteProfile();
+      }
+
+      return ready;
+    } catch {
+      promptCompleteProfile();
+      return false;
+    }
+  }, [myUserId, promptCompleteProfile]);
+
   const sendFriendRequest = useCallback(async () => {
     if (!myUserId || !selectedUserId) return;
     if (myUserId === selectedUserId) return;
+    const canProceed = await canUseProfileGatedActions();
+    if (!canProceed) return;
 
     try {
       setSendingRequest(true);
@@ -552,7 +569,7 @@ export default function MapScreen() {
     } finally {
       setSendingRequest(false);
     }
-  }, [myUserId, selectedUserId]);
+  }, [myUserId, selectedUserId, canUseProfileGatedActions]);
 
   if (checkingAuth || checkingProfileReady) {
     return (
@@ -563,29 +580,25 @@ export default function MapScreen() {
     );
   }
 
-  if (!authed || !isProfileReady) {
+  if (!authed) {
     return (
       <View style={styles.center}>
         <Text style={{ fontSize: 18, fontWeight: "700" }}>
-          {!authed ? "Sign in required" : "Finish your profile first"}
+          Sign in required
         </Text>
         <Text style={{ marginTop: 10, textAlign: "center", opacity: 0.85 }}>
-          {!authed
-            ? "Please sign in or create an account before using the map."
-            : "Add your username/photo and choose your location visibility before using the map."}
+          Please sign in or create an account before using the map.
         </Text>
 
         <Pressable
-          onPress={() => router.navigate(!authed ? "/" : "/profile")}
+          onPress={() => router.navigate("/")}
           style={({ pressed }) => [
             styles.friendBtn,
             { marginTop: 16, paddingHorizontal: 18 },
             pressed && { opacity: 0.85 },
           ]}
         >
-          <Text style={styles.friendBtnText}>
-            {!authed ? "Go to Home" : "Go to Profile"}
-          </Text>
+          <Text style={styles.friendBtnText}>Go to Home</Text>
         </Pressable>
       </View>
     );

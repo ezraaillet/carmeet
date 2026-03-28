@@ -1,6 +1,6 @@
 import { MapDataProvider, useMapData } from "@/components/MapDataProvider";
 import { Pressable, Text, View } from "react-native";
-import { Tabs, usePathname, useRouter } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -8,7 +8,7 @@ import NotificationsOverlay from "../components/NotificationsOverlay";
 import { colors } from "../styles/themes";
 import styles from "../styles/homestyles";
 import { supabase } from "../database/supabase";
-import { hasMapProfileData } from "@/utils/profileReadiness";
+import { ensureMinimalProfileExists } from "@/utils/profileReadiness";
 
 export type FriendRequest = {
   id: string;
@@ -21,10 +21,7 @@ export type FriendRequest = {
 function RootLayoutInner() {
   const { refresh } = useMapData();
   const router = useRouter();
-  const pathname = usePathname();
 
-  const [mapProfileReady, setMapProfileReady] = useState<boolean>(false);
-  const [checkingProfileReady, setCheckingProfileReady] = useState<boolean>(false);
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
 
   const [authedEmail, setAuthedEmail] = useState<string | null>(null);
@@ -38,40 +35,13 @@ function RootLayoutInner() {
   const [notifError, setNotifError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const fetchProfileReadiness = useCallback(
-    async (uid: string) => {
-      setCheckingProfileReady(true);
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("username, display_name, location_visibility")
-        .eq("id", uid)
-        .maybeSingle<{
-          username: string | null;
-          display_name: string | null;
-          location_visibility: string | null;
-        }>();
-
-      if (error) {
-        console.warn("fetch profile readiness error:", error.message);
-        setMapProfileReady(false);
-        setCheckingProfileReady(false);
-        router.navigate("/profile?onboarding=1");
-        return;
-      }
-
-      const ready = hasMapProfileData(data);
-      setMapProfileReady(ready);
-      setCheckingProfileReady(false);
-
-      if (!ready) {
-        router.navigate("/profile?onboarding=1");
-      }
-
-      return ready;
-    },
-    [router]
-  );
+  const ensureProfileExists = useCallback(async (uid: string, email?: string | null) => {
+    try {
+      await ensureMinimalProfileExists(uid, email);
+    } catch (error: any) {
+      console.warn("ensure profile exists error:", error?.message ?? error);
+    }
+  }, []);
 
   // Track auth
   useEffect(() => {
@@ -84,10 +54,7 @@ function RootLayoutInner() {
       setUserId(user?.id ?? null);
 
       if (user?.id) {
-        await fetchProfileReadiness(user.id);
-      } else {
-        setMapProfileReady(false);
-        setCheckingProfileReady(false);
+        await ensureProfileExists(user.id, user.email ?? null);
       }
 
       setCheckingAuth(false);
@@ -98,17 +65,15 @@ function RootLayoutInner() {
       setAuthedEmail(user?.email ?? null);
       setUserId(user?.id ?? null);
 
-      if (user?.id) fetchProfileReadiness(user.id);
-      else {
-        setMapProfileReady(false);
-        setCheckingProfileReady(false);
+      if (user?.id) {
+        void ensureProfileExists(user.id, user.email ?? null);
       }
 
       setCheckingAuth(false);
     });
 
     return () => sub.subscription.unsubscribe();
-  }, [fetchProfileReadiness]);
+  }, [ensureProfileExists]);
 
   // Fetch pending requests list + count
   const fetchPendingRequests = useCallback(async () => {
@@ -157,32 +122,6 @@ function RootLayoutInner() {
     refresh(userId);
   }, [userId, fetchPendingRequests, refresh]);
 
-  // realtime profile readiness watch
-  useEffect(() => {
-    if (!userId) return;
-
-    const channel = supabase
-      .channel("profile-readiness-watch")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "profiles",
-          filter: `id=eq.${userId}`,
-        },
-        (payload) => {
-          const next = payload.new as any;
-          setMapProfileReady(hasMapProfileData(next));
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId]);
-
   // Realtime updates for friend requests
   useEffect(() => {
     if (!userId) return;
@@ -206,29 +145,7 @@ function RootLayoutInner() {
   }, [userId, fetchPendingRequests]);
 
 
-  // Re-check map profile data when returning to Profile so tab gating updates immediately
-  useEffect(() => {
-    if (checkingAuth || !userId) return;
-    if (pathname !== "/profile") return;
-
-    fetchProfileReadiness(userId);
-  }, [checkingAuth, userId, pathname, fetchProfileReadiness]);
-
-
-  useEffect(() => {
-    if (checkingAuth || checkingProfileReady) return;
-
-    if (!userId) {
-      if (pathname === "/map") router.navigate("/");
-      return;
-    }
-
-    if (!mapProfileReady && pathname === "/map") {
-      router.navigate("/profile?onboarding=1");
-    }
-  }, [checkingAuth, checkingProfileReady, userId, mapProfileReady, pathname, router]);
-
-  const canAccessMap = !!userId && mapProfileReady && !checkingAuth && !checkingProfileReady;
+  const canAccessMap = !!userId && !checkingAuth;
 
   function openNotifications() {
     if (!userId) return;
@@ -348,28 +265,6 @@ function RootLayoutInner() {
                 if (!userId) {
                   e.preventDefault();
                   router.push("/");
-                  return;
-                }
-
-                if (checkingProfileReady) {
-                  e.preventDefault();
-                  return;
-                }
-
-                if (!mapProfileReady) {
-                  e.preventDefault();
-
-                  void (async () => {
-                    const ready = await fetchProfileReadiness(userId, {
-                      redirectIfNotReady: false,
-                    });
-
-                    if (ready) {
-                      router.push("/map");
-                    } else {
-                      router.push("/profile?onboarding=1");
-                    }
-                  })();
                 }
               },
             }}
