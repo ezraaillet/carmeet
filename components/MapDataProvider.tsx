@@ -107,6 +107,16 @@ function dedupeMeets(rows: Meet[]) {
   });
 }
 
+function isMissingTagsColumnError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+
+  const maybeCode = "code" in error ? String(error.code ?? "") : "";
+  if (maybeCode === "42703") return true;
+
+  const maybeMessage = "message" in error ? String(error.message ?? "").toLowerCase() : "";
+  return maybeMessage.includes("meets.tags") && maybeMessage.includes("does not exist");
+}
+
 export function MapDataProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -178,22 +188,36 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const fetchMeets = useCallback(async (uid: string) => {
-    const meetSelect =
-      "id, title, description, cover_image_url, location_name, address, latitude, longitude, start_time, end_time, created_by, is_public, max_attendees, status, tags, created_at, updated_at";
+    const meetColumnsWithoutTags =
+      "id, title, description, cover_image_url, location_name, address, latitude, longitude, start_time, end_time, created_by, is_public, max_attendees, status, created_at, updated_at";
+    const meetColumnsWithTags = `${meetColumnsWithoutTags}, tags`;
 
-    const [{ data: membershipRows, error: membershipError }, { data: baseMeets, error: baseError }] =
-      await Promise.all([
-        supabase.from("meet_attendees").select("meet_id, status").eq("user_id", uid),
+    const queryMeets = async (includeTags: boolean, buildQuery: () => any) => {
+      const columns = includeTags ? meetColumnsWithTags : meetColumnsWithoutTags;
+      const { data, error } = await buildQuery().select(columns);
+
+      if (error && includeTags && isMissingTagsColumnError(error)) {
+        const fallback = await buildQuery().select(meetColumnsWithoutTags);
+        if (fallback.error) throw fallback.error;
+        return (fallback.data ?? []) as Meet[];
+      }
+
+      if (error) throw error;
+      return (data ?? []) as Meet[];
+    };
+
+    const [{ data: membershipRows, error: membershipError }, baseMeets] = await Promise.all([
+      supabase.from("meet_attendees").select("meet_id, status").eq("user_id", uid),
+      queryMeets(true, () =>
         supabase
           .from("meets")
-          .select(meetSelect)
           .or(`is_public.eq.true,created_by.eq.${uid}`)
           .order("start_time", { ascending: true })
-          .limit(100),
-      ]);
+          .limit(100)
+      ),
+    ]);
 
     if (membershipError) throw membershipError;
-    if (baseError) throw baseError;
 
     const myMemberships = (membershipRows ?? []) as MeetAttendance[];
     const myMeetAttendance = myMemberships.reduce<Record<string, string>>((acc, row) => {
@@ -207,13 +231,9 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
 
     let extraMeets: Meet[] = [];
     if (meetIdsFromMembership.length > 0) {
-      const { data: rows, error: rowsError } = await supabase
-        .from("meets")
-        .select(meetSelect)
-        .in("id", meetIdsFromMembership);
-
-      if (rowsError) throw rowsError;
-      extraMeets = (rows ?? []) as Meet[];
+      extraMeets = await queryMeets(true, () =>
+        supabase.from("meets").in("id", meetIdsFromMembership)
+      );
     }
 
     const mergedMeets = dedupeMeets([...(baseMeets ?? []), ...extraMeets] as Meet[]);
