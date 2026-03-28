@@ -518,7 +518,7 @@ export default function Home() {
           start_time: parsedStart,
           created_by: myUserId,
           is_public: true,
-          status: "planned",
+          status: "upcoming",
         })
         .select("id")
         .single<{ id: string }>();
