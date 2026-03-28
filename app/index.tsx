@@ -129,7 +129,7 @@ function formatMeetTimeLabel(value: string) {
 export default function Home() {
   const router = useRouter();
   const {
-    ids,
+    friendIds,
     profilesById,
     myUserId,
     locationsById,
@@ -225,7 +225,12 @@ export default function Home() {
     () => cleanEmail.length > 0 && (password ?? "").length >= 6,
     [cleanEmail, password]
   );
-  const friendProfiles = useFriendProfiles(authedEmail, myUserId, ids, profilesById);
+  const friendProfiles = useFriendProfiles(
+    authedEmail,
+    myUserId,
+    friendIds,
+    profilesById
+  );
 
   const meetCards = useMemo(() => {
     return meets.map((meet) => {
