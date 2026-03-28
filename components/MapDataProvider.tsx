@@ -192,12 +192,15 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       "id, title, description, cover_image_url, location_name, address, latitude, longitude, start_time, end_time, created_by, is_public, max_attendees, status, created_at, updated_at";
     const meetColumnsWithTags = `${meetColumnsWithoutTags}, tags`;
 
-    const queryMeets = async (includeTags: boolean, buildQuery: () => any) => {
+    const queryMeets = async (
+      includeTags: boolean,
+      buildQuery: (columns: string) => any
+    ) => {
       const columns = includeTags ? meetColumnsWithTags : meetColumnsWithoutTags;
-      const { data, error } = await buildQuery().select(columns);
+      const { data, error } = await buildQuery(columns);
 
       if (error && includeTags && isMissingTagsColumnError(error)) {
-        const fallback = await buildQuery().select(meetColumnsWithoutTags);
+        const fallback = await buildQuery(meetColumnsWithoutTags);
         if (fallback.error) throw fallback.error;
         return (fallback.data ?? []) as Meet[];
       }
@@ -208,9 +211,10 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
 
     const [{ data: membershipRows, error: membershipError }, baseMeets] = await Promise.all([
       supabase.from("meet_attendees").select("meet_id, status").eq("user_id", uid),
-      queryMeets(true, () =>
+      queryMeets(true, (columns) =>
         supabase
           .from("meets")
+          .select(columns)
           .or(`is_public.eq.true,created_by.eq.${uid}`)
           .order("start_time", { ascending: true })
           .limit(100)
@@ -231,8 +235,8 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
 
     let extraMeets: Meet[] = [];
     if (meetIdsFromMembership.length > 0) {
-      extraMeets = await queryMeets(true, () =>
-        supabase.from("meets").in("id", meetIdsFromMembership)
+      extraMeets = await queryMeets(true, (columns) =>
+        supabase.from("meets").select(columns).in("id", meetIdsFromMembership)
       );
     }
 
