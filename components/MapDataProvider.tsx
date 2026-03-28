@@ -32,32 +32,34 @@ type Profile = {
 
 type Meet = {
   id: string;
-  title: string | null;
+  title: string;
   description: string | null;
   cover_image_url: string | null;
-  location_name: string | null;
+  location_name: string;
   address: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  start_time: string | null;
+  latitude: number;
+  longitude: number;
+  start_time: string;
   end_time: string | null;
-  created_by: string | null;
-  is_public: boolean | null;
+  created_by: string;
+  is_public: boolean;
   max_attendees: number | null;
-  status: string | null;
-  tags?: unknown;
-  created_at?: string | null;
-  updated_at?: string | null;
+  status: "upcoming" | "cancelled" | "completed";
+  created_at: string;
+  updated_at: string;
 };
 
 type MeetAttendance = {
+  id: string;
   meet_id: string;
+  user_id: string;
   status: string;
+  created_at: string;
+  updated_at: string;
 };
 
 type MeetAttendeeSummary = {
-  total: number;
-  confirmed: number;
+  going: number;
 };
 
 type MapDataState = {
@@ -107,16 +109,6 @@ function dedupeMeets(rows: Meet[]) {
   });
 }
 
-function isMissingTagsColumnError(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-
-  const maybeCode = "code" in error ? String(error.code ?? "") : "";
-  if (maybeCode === "42703") return true;
-
-  const maybeMessage = "message" in error ? String(error.message ?? "").toLowerCase() : "";
-  return maybeMessage.includes("meets.tags") && maybeMessage.includes("does not exist");
-}
-
 export function MapDataProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,12 +141,14 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
 
     const rows = (data ?? []) as {
-      user_id: string;
-      friend_id: string;
+      user_id: string | null;
+      friend_id: string | null;
       status: string;
     }[];
 
-    return rows.map((r) => (r.user_id === uid ? r.friend_id : r.user_id));
+    return rows
+      .map((r) => (r.user_id === uid ? r.friend_id : r.user_id))
+      .filter((id): id is string => Boolean(id));
   }, []);
 
   const fetchNearbyUserIds = useCallback(
@@ -188,37 +182,24 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const fetchMeets = useCallback(async (uid: string) => {
-    const meetColumnsWithoutTags =
+    const meetColumns =
       "id, title, description, cover_image_url, location_name, address, latitude, longitude, start_time, end_time, created_by, is_public, max_attendees, status, created_at, updated_at";
-    const meetColumnsWithTags = `${meetColumnsWithoutTags}, tags`;
-
-    const queryMeets = async (
-      includeTags: boolean,
-      buildQuery: (columns: string) => any
-    ) => {
-      const columns = includeTags ? meetColumnsWithTags : meetColumnsWithoutTags;
-      const { data, error } = await buildQuery(columns);
-
-      if (error && includeTags && isMissingTagsColumnError(error)) {
-        const fallback = await buildQuery(meetColumnsWithoutTags);
-        if (fallback.error) throw fallback.error;
-        return (fallback.data ?? []) as Meet[];
-      }
-
-      if (error) throw error;
-      return (data ?? []) as Meet[];
-    };
 
     const [{ data: membershipRows, error: membershipError }, baseMeets] = await Promise.all([
-      supabase.from("meet_attendees").select("meet_id, status").eq("user_id", uid),
-      queryMeets(true, (columns) =>
-        supabase
+      supabase
+        .from("meet_attendees")
+        .select("id, meet_id, user_id, status, created_at, updated_at")
+        .eq("user_id", uid),
+      (async () => {
+        const { data, error } = await supabase
           .from("meets")
-          .select(columns)
+          .select(meetColumns)
           .or(`is_public.eq.true,created_by.eq.${uid}`)
           .order("start_time", { ascending: true })
-          .limit(100)
-      ),
+          .limit(100);
+        if (error) throw error;
+        return (data ?? []) as Meet[];
+      })(),
     ]);
 
     if (membershipError) throw membershipError;
@@ -235,9 +216,12 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
 
     let extraMeets: Meet[] = [];
     if (meetIdsFromMembership.length > 0) {
-      extraMeets = await queryMeets(true, (columns) =>
-        supabase.from("meets").select(columns).in("id", meetIdsFromMembership)
-      );
+      const { data, error } = await supabase
+        .from("meets")
+        .select(meetColumns)
+        .in("id", meetIdsFromMembership);
+      if (error) throw error;
+      extraMeets = (data ?? []) as Meet[];
     }
 
     const mergedMeets = dedupeMeets([...(baseMeets ?? []), ...extraMeets] as Meet[]);
@@ -259,15 +243,11 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           const status = (row.status ?? "").toLowerCase();
 
           if (!acc[meetId]) {
-            acc[meetId] = { total: 0, confirmed: 0 };
+            acc[meetId] = { going: 0 };
           }
 
-          if (!["rejected", "declined", "cancelled", "removed"].includes(status)) {
-            acc[meetId].total += 1;
-          }
-
-          if (["accepted", "going", "host", "confirmed"].includes(status)) {
-            acc[meetId].confirmed += 1;
+          if (status === "going") {
+            acc[meetId].going += 1;
           }
 
           return acc;

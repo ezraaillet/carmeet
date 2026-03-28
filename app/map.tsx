@@ -58,40 +58,6 @@ function formatLastSeen(updatedAt?: string | null) {
   return `${d}d ago`;
 }
 
-function normalizeMeetTags(tags: unknown): string[] {
-  if (!tags) return [];
-
-  if (Array.isArray(tags)) {
-    return tags.map((tag) => String(tag).trim()).filter(Boolean);
-  }
-
-  if (typeof tags === "string") {
-    const trimmed = tags.trim();
-    if (!trimmed) return [];
-
-    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) {
-          return parsed.map((tag) => String(tag).trim()).filter(Boolean);
-        }
-      } catch {
-        return trimmed
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean);
-      }
-    }
-
-    return trimmed
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
-  }
-
-  return [];
-}
-
 function formatMeetWhen(startTime?: string | null, endTime?: string | null) {
   if (!startTime) return "Time TBD";
 
@@ -517,7 +483,6 @@ export default function MapScreen() {
         ...meet,
         latitude: Number(meet.latitude),
         longitude: Number(meet.longitude),
-        tags: normalizeMeetTags(meet.tags),
       }));
   }, [meets]);
 
@@ -679,11 +644,7 @@ export default function MapScreen() {
             key={`meet-${meet.id}`}
             coordinate={{ latitude: meet.latitude, longitude: meet.longitude }}
             title={meet.title || "Meet"}
-            description={
-              meet.tags.length > 0
-                ? `Tags: ${meet.tags.slice(0, 3).join(", ")}`
-                : meet.location_name || meet.address || "Car meet"
-            }
+            description={meet.location_name || "Car meet"}
             pinColor="#f97316"
             zIndex={400}
             onPress={() => {
@@ -774,7 +735,7 @@ export default function MapScreen() {
                   {formatMeetWhen(selectedMeet.start_time, selectedMeet.end_time)}
                 </Text>
                 <Text style={styles.cardSubSmall}>
-                  {formatMeetStatus(selectedMeet.status)} · {meetAttendeeSummaryByMeetId[selectedMeet.id]?.confirmed ?? 0} confirmed
+                  {formatMeetStatus(selectedMeet.status)} · {meetAttendeeSummaryByMeetId[selectedMeet.id]?.going ?? 0} going
                 </Text>
               </View>
 
@@ -789,15 +750,6 @@ export default function MapScreen() {
               </Text>
             ) : null}
 
-            {normalizeMeetTags(selectedMeet.tags).length > 0 && (
-              <View style={styles.meetTagsRow}>
-                {normalizeMeetTags(selectedMeet.tags).map((tag) => (
-                  <View key={`${selectedMeet.id}-${tag}`} style={styles.meetTagPill}>
-                    <Text style={styles.meetTagPillText}>#{tag}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
           </View>
         </View>
       )}
