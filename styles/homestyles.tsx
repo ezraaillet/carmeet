@@ -499,6 +499,56 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 12,
   },
+  createMeetFieldLabel: {
+    color: colors.silver,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  createMeetChipRow: {
+    gap: 8,
+    paddingBottom: 10,
+    paddingRight: 8,
+  },
+  createMeetChip: {
+    borderWidth: 1,
+    borderColor: colors.steel,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: colors.gunmetal,
+  },
+  createMeetChipSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primaryDark,
+  },
+  createMeetChipPressed: {
+    opacity: 0.8,
+  },
+  createMeetChipText: {
+    color: colors.offwhite,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  createMeetChipTextSelected: {
+    color: colors.black,
+    fontWeight: "700",
+  },
+  createMeetMap: {
+    height: 180,
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    marginBottom: 8,
+  },
+  createMeetMapHint: {
+    color: colors.silver,
+    fontSize: 12,
+    marginBottom: 12,
+  },
   createMeetDescriptionInput: {
     minHeight: 88,
   },
