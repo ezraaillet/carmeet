@@ -3,6 +3,7 @@ import * as Location from "expo-location";
 import {
   ActivityIndicator,
   Alert,
+  Easing,
   Image,
   Platform,
   Pressable,
@@ -10,7 +11,13 @@ import {
   Text,
   View,
 } from "react-native";
-import MapView, { Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
+import MapView, {
+  AnimatedRegion,
+  Marker,
+  MarkerAnimated,
+  PROVIDER_GOOGLE,
+  Region,
+} from "react-native-maps";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "@/styles/mapstyles";
@@ -114,6 +121,73 @@ function distanceInMeters(a: LiveLoc, b: LiveLoc) {
   return Math.hypot(dLat, dLng);
 }
 
+function distanceBetweenCoordsMeters(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number }
+) {
+  const avgLatRad = (((a.latitude + b.latitude) / 2) * Math.PI) / 180;
+  const metersPerDegLat = 111_111;
+  const metersPerDegLng = 111_111 * Math.cos(avgLatRad);
+
+  const dLat = (a.latitude - b.latitude) * metersPerDegLat;
+  const dLng = (a.longitude - b.longitude) * metersPerDegLng;
+
+  return Math.hypot(dLat, dLng);
+}
+
+const MARKER_JITTER_THRESHOLD_METERS = 2;
+const MARKER_SNAP_THRESHOLD_METERS = 350;
+const MARKER_ANIMATION_DURATION_MS = 900;
+
+type AnimatedUserMarkerProps = {
+  userId: string;
+  coordinate: AnimatedRegion;
+  title: string;
+  description: string;
+  fresh: boolean;
+  markerUri: string | null;
+  markerInitials: string;
+  onPress: (userId: string) => void;
+  onRef: (userId: string, marker: MarkerAnimated | null) => void;
+};
+
+const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
+  userId,
+  coordinate,
+  title,
+  description,
+  fresh,
+  markerUri,
+  markerInitials,
+  onPress,
+  onRef,
+}: AnimatedUserMarkerProps) {
+  return (
+    <MarkerAnimated
+      ref={(marker) => onRef(userId, marker)}
+      coordinate={coordinate}
+      anchor={{ x: 0.5, y: 0.5 }}
+      title={title}
+      description={description}
+      zIndex={999}
+      onPress={() => onPress(userId)}
+    >
+      {markerUri ? (
+        <Image
+          source={{ uri: markerUri }}
+          style={[styles.icon, { opacity: fresh ? 1 : 0.45 }]}
+        />
+      ) : (
+        <View style={[styles.iconInitials, { opacity: fresh ? 1 : 0.45 }]}>
+          <Text style={{ color: "white", fontWeight: "700" }}>
+            {markerInitials}
+          </Text>
+        </View>
+      )}
+    </MarkerAnimated>
+  );
+});
+
 export default function MapScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView | null>(null);
@@ -151,6 +225,11 @@ export default function MapScreen() {
   const [sendingRequest, setSendingRequest] = useState(false);
 
   const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
+  const animatedUserCoordsRef = useRef<Record<string, AnimatedRegion>>({});
+  const markerRefs = useRef<Record<string, MarkerAnimated | null>>({});
+  const lastAnimatedTargetsRef = useRef<
+    Record<string, { latitude: number; longitude: number }>
+  >({});
 
   useEffect(() => {
     let mounted = true;
@@ -323,13 +402,6 @@ export default function MapScreen() {
                 longitude: coords.longitude,
               }));
 
-              mapRef.current?.animateCamera({
-                center: {
-                  latitude: coords.latitude,
-                  longitude: coords.longitude,
-                },
-              });
-
               await upsertMyLocation(
                 coords.latitude,
                 coords.longitude,
@@ -470,6 +542,96 @@ export default function MapScreen() {
         longitude: Number(meet.longitude),
       }));
   }, [meets]);
+
+  const userMarkerItems = useMemo(
+    () =>
+      mapMarkers.filter(
+        (
+          item
+        ): item is {
+          type: "user";
+          loc: LiveLoc;
+          adjLat: number;
+          adjLng: number;
+        } => item.type === "user"
+      ),
+    [mapMarkers]
+  );
+
+  const getOrCreateAnimatedUserCoordinate = useCallback(
+    (userId: string, latitude: number, longitude: number) => {
+      let coord = animatedUserCoordsRef.current[userId];
+
+      if (!coord) {
+        coord = new AnimatedRegion({
+          latitude,
+          longitude,
+          latitudeDelta: 0,
+          longitudeDelta: 0,
+        });
+        animatedUserCoordsRef.current[userId] = coord;
+        lastAnimatedTargetsRef.current[userId] = { latitude, longitude };
+      }
+
+      return coord;
+    },
+    []
+  );
+
+  useEffect(() => {
+    const nextUserIds = new Set(userMarkerItems.map((item) => item.loc.user_id));
+
+    Object.keys(animatedUserCoordsRef.current).forEach((userId) => {
+      if (!nextUserIds.has(userId)) {
+        delete animatedUserCoordsRef.current[userId];
+        delete markerRefs.current[userId];
+        delete lastAnimatedTargetsRef.current[userId];
+      }
+    });
+
+    userMarkerItems.forEach((item) => {
+      const userId = item.loc.user_id;
+      const nextCoordinate = {
+        latitude: item.adjLat,
+        longitude: item.adjLng,
+      };
+
+      const animatedCoord = getOrCreateAnimatedUserCoordinate(
+        userId,
+        nextCoordinate.latitude,
+        nextCoordinate.longitude
+      );
+
+      const last = lastAnimatedTargetsRef.current[userId] ?? nextCoordinate;
+      const metersMoved = distanceBetweenCoordsMeters(last, nextCoordinate);
+
+      if (metersMoved < MARKER_JITTER_THRESHOLD_METERS) return;
+
+      lastAnimatedTargetsRef.current[userId] = nextCoordinate;
+
+      if (metersMoved > MARKER_SNAP_THRESHOLD_METERS) {
+        animatedCoord.setValue(nextCoordinate);
+        return;
+      }
+
+      if (Platform.OS === "android") {
+        markerRefs.current[userId]?.animateMarkerToCoordinate(
+          nextCoordinate,
+          MARKER_ANIMATION_DURATION_MS
+        );
+        return;
+      }
+
+      animatedCoord
+        .timing({
+          ...nextCoordinate,
+          duration: MARKER_ANIMATION_DURATION_MS,
+          useNativeDriver: false,
+          easing: Easing.linear,
+        })
+        .start();
+    });
+  }, [getOrCreateAnimatedUserCoordinate, userMarkerItems]);
 
   const selectedMeet = useMemo(() => {
     if (!selectedMeetId) return null;
@@ -706,31 +868,27 @@ export default function MapScreen() {
           const lastSeen = formatLastSeen(loc.updated_at);
           const markerUri = p?.photo_url ?? null;
 
+          const animatedCoordinate = getOrCreateAnimatedUserCoordinate(
+            loc.user_id,
+            adjLat,
+            adjLng
+          );
+
           return (
-            <Marker
+            <AnimatedUserMarker
               key={loc.user_id}
-              coordinate={{ latitude: adjLat, longitude: adjLng }}
-              anchor={{ x: 0.5, y: 0.5 }}
+              userId={loc.user_id}
+              coordinate={animatedCoordinate}
               title={markerName}
               description={fresh ? "Live" : `Last seen ${lastSeen}`}
-              zIndex={999}
-              onPress={() => handleMarkerPress(loc.user_id)}
-            >
-              {markerUri ? (
-                <Image
-                  source={{ uri: markerUri }}
-                  style={[styles.icon, { opacity: fresh ? 1 : 0.45 }]}
-                />
-              ) : (
-                <View
-                  style={[styles.iconInitials, { opacity: fresh ? 1 : 0.45 }]}
-                >
-                  <Text style={{ color: "white", fontWeight: "700" }}>
-                    {markerInitials}
-                  </Text>
-                </View>
-              )}
-            </Marker>
+              fresh={fresh}
+              markerUri={markerUri}
+              markerInitials={markerInitials}
+              onPress={handleMarkerPress}
+              onRef={(userId, marker) => {
+                markerRefs.current[userId] = marker;
+              }}
+            />
           );
         })}
       </MapView>
