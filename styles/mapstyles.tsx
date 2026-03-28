@@ -120,6 +120,31 @@ const mapStyles = StyleSheet.create({
     color: "crimson",
     fontSize: 13,
   },
+  meetDescriptionText: {
+    marginTop: 8,
+    color: "#cfcfcf",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  meetTagsRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  meetTagPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  meetTagPillText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
 });
 
 export default mapStyles;

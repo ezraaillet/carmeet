@@ -44,9 +44,97 @@ function useFriendProfiles(
   }, [authedEmail, ids, myUserId, profilesById]);
 }
 
+function normalizeMeetTags(tags: unknown): string[] {
+  if (!tags) return [];
+
+  if (Array.isArray(tags)) {
+    return tags.map((tag) => String(tag).trim()).filter(Boolean);
+  }
+
+  if (typeof tags === "string") {
+    const trimmed = tags.trim();
+
+    if (!trimmed) return [];
+
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map((tag) => String(tag).trim()).filter(Boolean);
+        }
+      } catch {
+        return trimmed
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+      }
+    }
+
+    return trimmed
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function formatMeetWhen(startTime?: string | null, endTime?: string | null) {
+  if (!startTime) return "Time TBD";
+
+  const start = new Date(startTime);
+  const end = endTime ? new Date(endTime) : null;
+
+  if (!Number.isFinite(start.getTime())) return "Time TBD";
+
+  const startLabel = start.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  if (!end || !Number.isFinite(end.getTime())) return startLabel;
+
+  const sameDay = start.toDateString() === end.toDateString();
+  if (sameDay) {
+    const endClock = end.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+
+    return `${startLabel} - ${endClock}`;
+  }
+
+  const endLabel = end.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  return `${startLabel} → ${endLabel}`;
+}
+
+function formatMeetStatus(status?: string | null) {
+  if (!status) return "Planned";
+  return status
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function Home() {
   const router = useRouter();
-  const { ids, profilesById, myUserId, loading: mapLoading, refresh } = useMapData();
+  const {
+    ids,
+    profilesById,
+    myUserId,
+    loading: mapLoading,
+    meets,
+    myMeetAttendanceByMeetId,
+    meetAttendeeSummaryByMeetId,
+    refresh,
+  } = useMapData();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,7 +150,6 @@ export default function Home() {
   const [selectedFriend, setSelectedFriend] = useState<FriendProfile | null>(null);
   const [removingFriendId, setRemovingFriendId] = useState<string | null>(null);
 
-  // choose which auth flow (prevents empty signups)
   const [authMode, setAuthMode] = useState<AuthMode>(null);
 
   const cleanEmail = useMemo(() => (email ?? "").trim(), [email]);
@@ -71,6 +158,24 @@ export default function Home() {
     [cleanEmail, password]
   );
   const friendProfiles = useFriendProfiles(authedEmail, myUserId, ids, profilesById);
+
+  const meetCards = useMemo(() => {
+    return meets.map((meet) => {
+      const tags = normalizeMeetTags(meet.tags);
+      const summary = meetAttendeeSummaryByMeetId[meet.id] ?? {
+        total: 0,
+        confirmed: 0,
+      };
+      const attendance = myMeetAttendanceByMeetId[meet.id] ?? null;
+
+      return {
+        ...meet,
+        tags,
+        summary,
+        attendance,
+      };
+    });
+  }, [meets, meetAttendeeSummaryByMeetId, myMeetAttendanceByMeetId]);
 
   async function routeAfterAuth(uid: string) {
     const { data, error } = await supabase
@@ -177,13 +282,6 @@ export default function Home() {
 
     const passLen = (password ?? "").length;
 
-    console.log("SIGNUP INPUT:", {
-      rawEmail: email,
-      cleanEmail,
-      passLen,
-      hasAt: cleanEmail.includes("@"),
-    });
-
     if (!cleanEmail) {
       setError("Email is required.");
       setLoading(false);
@@ -199,9 +297,6 @@ export default function Home() {
       email: cleanEmail,
       password,
     });
-
-    console.log("SIGNUP DATA:", data);
-    console.log("SIGNUP ERROR:", error);
 
     if (error) {
       setError(error.message);
@@ -480,9 +575,101 @@ export default function Home() {
                     )}
                   </View>
                 ) : (
-                  <Text style={styles.homeTabContentText}>
-                    Meets feed goes here
-                  </Text>
+                  <View style={styles.meetsPanel}>
+                    <View style={styles.friendsHeaderRow}>
+                      <View>
+                        <Text style={styles.friendsTitle}>Upcoming meets</Text>
+                        <Text style={styles.friendsSubtitle}>
+                          {meetCards.length === 0
+                            ? "No meets yet. Create one to get your crew together."
+                            : `${meetCards.length} meet${meetCards.length === 1 ? "" : "s"} available.`}
+                        </Text>
+                      </View>
+
+                      <Pressable
+                        onPress={handleRefreshFriends}
+                        style={({ pressed }) => [
+                          styles.friendsRefreshButton,
+                          pressed && styles.friendsRefreshButtonPressed,
+                        ]}
+                      >
+                        <Text style={styles.friendsRefreshButtonText}>Refresh</Text>
+                      </Pressable>
+                    </View>
+
+                    {mapLoading ? (
+                      <View style={styles.friendsEmptyState}>
+                        <ActivityIndicator />
+                        <Text style={styles.homeTabContentText}>Loading meets…</Text>
+                      </View>
+                    ) : meetCards.length === 0 ? (
+                      <View style={styles.friendsEmptyState}>
+                        <Text style={styles.friendsEmptyTitle}>No meets found</Text>
+                        <Text style={styles.homeTabContentText}>
+                          Public meets and your joined meets will appear here.
+                        </Text>
+                      </View>
+                    ) : (
+                      <ScrollView
+                        contentContainerStyle={styles.friendsList}
+                        showsVerticalScrollIndicator={false}
+                      >
+                        {meetCards.map((meet) => (
+                          <View key={meet.id} style={styles.meetCard}>
+                            <View style={styles.meetHeaderRow}>
+                              <Text style={styles.meetTitle}>
+                                {meet.title || "Untitled meet"}
+                              </Text>
+                              <Text style={styles.meetStatus}>
+                                {formatMeetStatus(meet.status)}
+                              </Text>
+                            </View>
+
+                            <Text style={styles.meetTimeText}>
+                              {formatMeetWhen(meet.start_time, meet.end_time)}
+                            </Text>
+
+                            <Text style={styles.meetLocationText}>
+                              📍 {meet.location_name || meet.address || "Location TBD"}
+                            </Text>
+
+                            {!!meet.description && (
+                              <Text style={styles.meetDescription} numberOfLines={3}>
+                                {meet.description}
+                              </Text>
+                            )}
+
+                            <View style={styles.meetMetaRow}>
+                              <Text style={styles.meetMetaText}>
+                                {meet.summary.confirmed} confirmed · {meet.summary.total} attending
+                              </Text>
+                              {!!meet.max_attendees && (
+                                <Text style={styles.meetMetaText}>
+                                  Cap: {meet.max_attendees}
+                                </Text>
+                              )}
+                            </View>
+
+                            {meet.attendance && (
+                              <Text style={styles.meetAttendanceText}>
+                                Your status: {formatMeetStatus(meet.attendance)}
+                              </Text>
+                            )}
+
+                            {meet.tags.length > 0 && (
+                              <View style={styles.meetTagsRow}>
+                                {meet.tags.map((tag) => (
+                                  <View key={`${meet.id}-${tag}`} style={styles.meetTagPill}>
+                                    <Text style={styles.meetTagPillText}>#{tag}</Text>
+                                  </View>
+                                ))}
+                              </View>
+                            )}
+                          </View>
+                        ))}
+                      </ScrollView>
+                    )}
+                  </View>
                 )}
               </View>
             </>
@@ -569,8 +756,8 @@ export default function Home() {
                           ? "Signing In..."
                           : "Creating Account..."
                         : authMode === "signin"
-                        ? "Continue"
-                        : "Create Account"}
+                          ? "Continue"
+                          : "Create Account"}
                     </Text>
                   </Pressable>
 
