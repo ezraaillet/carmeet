@@ -30,6 +30,36 @@ type Profile = {
   onboarded?: boolean | null;
 };
 
+type Meet = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  cover_image_url: string | null;
+  location_name: string | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  start_time: string | null;
+  end_time: string | null;
+  created_by: string | null;
+  is_public: boolean | null;
+  max_attendees: number | null;
+  status: string | null;
+  tags?: unknown;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type MeetAttendance = {
+  meet_id: string;
+  status: string;
+};
+
+type MeetAttendeeSummary = {
+  total: number;
+  confirmed: number;
+};
+
 type MapDataState = {
   loading: boolean;
   error: string | null;
@@ -37,6 +67,9 @@ type MapDataState = {
   ids: string[];
   profilesById: Record<string, Profile>;
   locationsById: Record<string, LiveLoc>;
+  meets: Meet[];
+  myMeetAttendanceByMeetId: Record<string, string>;
+  meetAttendeeSummaryByMeetId: Record<string, MeetAttendeeSummary>;
   refresh: (uidOverride?: string | null) => Promise<void>;
   setMyLiveLocation: (loc: LiveLoc) => void;
 };
@@ -59,6 +92,20 @@ function metersBetween(aLat: number, aLng: number, bLat: number, bLng: number) {
   return 2 * R * Math.asin(Math.sqrt(x));
 }
 
+function dedupeMeets(rows: Meet[]) {
+  const map = new Map<string, Meet>();
+  rows.forEach((row) => {
+    if (!row?.id) return;
+    map.set(row.id, row);
+  });
+
+  return Array.from(map.values()).sort((a, b) => {
+    const aTime = a.start_time ? new Date(a.start_time).getTime() : Number.POSITIVE_INFINITY;
+    const bTime = b.start_time ? new Date(b.start_time).getTime() : Number.POSITIVE_INFINITY;
+    return aTime - bTime;
+  });
+}
+
 export function MapDataProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,28 +116,31 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
   const [locationsById, setLocationsById] = useState<Record<string, LiveLoc>>(
     {}
   );
+  const [meets, setMeets] = useState<Meet[]>([]);
+  const [myMeetAttendanceByMeetId, setMyMeetAttendanceByMeetId] = useState<
+    Record<string, string>
+  >({});
+  const [meetAttendeeSummaryByMeetId, setMeetAttendeeSummaryByMeetId] = useState<
+    Record<string, MeetAttendeeSummary>
+  >({});
 
   const didSubscribeRef = useRef(false);
 
   const fetchFriendIds = useCallback(async (uid: string) => {
-    // Pull accepted friendships where I’m either side
     const { data, error } = await supabase
       .from("friendships")
       .select("user_id, friend_id, status")
       .eq("status", "accepted")
       .or(`user_id.eq.${uid},friend_id.eq.${uid}`);
 
-    console.log("friends rows:", data?.length, "friend err:", error?.message);
-
     if (error) throw error;
 
-    const rows = (data ?? []) as Array<{
+    const rows = (data ?? []) as {
       user_id: string;
       friend_id: string;
       status: string;
-    }>;
+    }[];
 
-    // Return the "other person" for each row
     return rows.map((r) => (r.user_id === uid ? r.friend_id : r.user_id));
   }, []);
 
@@ -114,7 +164,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         .lte("lng", maxLng);
 
       if (error) throw error;
-      console.log("data: ", data);
+
       return (data ?? [])
         .filter(
           (r) => metersBetween(myLat, myLng, r.lat, r.lng) <= radiusMeters
@@ -124,9 +174,88 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const fetchMeets = useCallback(async (uid: string) => {
+    const meetSelect =
+      "id, title, description, cover_image_url, location_name, address, latitude, longitude, start_time, end_time, created_by, is_public, max_attendees, status, tags, created_at, updated_at";
+
+    const [{ data: membershipRows, error: membershipError }, { data: baseMeets, error: baseError }] =
+      await Promise.all([
+        supabase.from("meet_attendees").select("meet_id, status").eq("user_id", uid),
+        supabase
+          .from("meets")
+          .select(meetSelect)
+          .or(`is_public.eq.true,created_by.eq.${uid}`)
+          .order("start_time", { ascending: true })
+          .limit(100),
+      ]);
+
+    if (membershipError) throw membershipError;
+    if (baseError) throw baseError;
+
+    const myMemberships = (membershipRows ?? []) as MeetAttendance[];
+    const myMeetAttendance = myMemberships.reduce<Record<string, string>>((acc, row) => {
+      acc[row.meet_id] = row.status;
+      return acc;
+    }, {});
+
+    const meetIdsFromMembership = Array.from(
+      new Set(myMemberships.map((row) => row.meet_id).filter(Boolean))
+    );
+
+    let extraMeets: Meet[] = [];
+    if (meetIdsFromMembership.length > 0) {
+      const { data: rows, error: rowsError } = await supabase
+        .from("meets")
+        .select(meetSelect)
+        .in("id", meetIdsFromMembership);
+
+      if (rowsError) throw rowsError;
+      extraMeets = (rows ?? []) as Meet[];
+    }
+
+    const mergedMeets = dedupeMeets([...(baseMeets ?? []), ...extraMeets] as Meet[]);
+    const mergedMeetIds = mergedMeets.map((meet) => meet.id);
+
+    let summaryByMeetId: Record<string, MeetAttendeeSummary> = {};
+
+    if (mergedMeetIds.length > 0) {
+      const { data: attendeeRows, error: attendeeError } = await supabase
+        .from("meet_attendees")
+        .select("meet_id, status")
+        .in("meet_id", mergedMeetIds);
+
+      if (attendeeError) throw attendeeError;
+
+      summaryByMeetId = (attendeeRows ?? []).reduce<Record<string, MeetAttendeeSummary>>(
+        (acc, row) => {
+          const meetId = row.meet_id;
+          const status = (row.status ?? "").toLowerCase();
+
+          if (!acc[meetId]) {
+            acc[meetId] = { total: 0, confirmed: 0 };
+          }
+
+          if (!["rejected", "declined", "cancelled", "removed"].includes(status)) {
+            acc[meetId].total += 1;
+          }
+
+          if (["accepted", "going", "host", "confirmed"].includes(status)) {
+            acc[meetId].confirmed += 1;
+          }
+
+          return acc;
+        },
+        {}
+      );
+    }
+
+    setMeets(mergedMeets);
+    setMyMeetAttendanceByMeetId(myMeetAttendance);
+    setMeetAttendeeSummaryByMeetId(summaryByMeetId);
+  }, []);
+
   const refresh = useCallback(
     async (uidOverride?: string | null) => {
-      // helper: load profiles + locations for a set of ids and merge into state
       const loadForIds = async (idsToLoad: string[]) => {
         if (!idsToLoad.length) return;
 
@@ -145,29 +274,18 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
             .in("id", uniq),
         ]);
 
-        console.log("loc rows:", locRows?.length, "locErr:", locErr?.message);
-        console.log(
-          "prof rows:",
-          profRows?.length,
-          "profErr:",
-          profErr?.message
-        );
-
         if (locErr) throw locErr;
         if (profErr) throw profErr;
 
-        // merge profiles
         const profMap: Record<string, Profile> = {};
         (profRows ?? []).forEach((p: any) => (profMap[p.id] = p as Profile));
         setProfilesById((prev) => ({ ...prev, ...profMap }));
 
-        // prefetch photos
         (profRows ?? [])
           .map((p: any) => p.photo_url as string | null)
           .filter(Boolean)
           .forEach((uri) => Image.prefetch(uri!));
 
-        // merge locations
         const locMap: Record<string, LiveLoc> = {};
         (locRows ?? []).forEach((l: any) => (locMap[l.user_id] = l as LiveLoc));
         setLocationsById((prev) => ({ ...prev, ...locMap }));
@@ -177,10 +295,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         setLoading(true);
         setError(null);
 
-        // ✅ Use uid from layout if provided (avoids auth race)
         let uid = uidOverride ?? null;
-
-        console.log("MAP REFRESH uid:", uid);
 
         if (!uid) {
           const { data: auth } = await supabase.auth.getUser();
@@ -193,16 +308,18 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           setIds([]);
           setProfilesById({});
           setLocationsById({});
+          setMeets([]);
+          setMyMeetAttendanceByMeetId({});
+          setMeetAttendeeSummaryByMeetId({});
           return;
         }
 
-        // ✅ Always load friends (even without location permission)
         const friendIds = await fetchFriendIds(uid);
         const baseIds = Array.from(new Set([uid, ...friendIds]));
         setIds(baseIds);
-        await loadForIds(baseIds);
 
-        // ✅ Subscribe once to location updates (and fetch missing profiles as they appear)
+        await Promise.all([loadForIds(baseIds), fetchMeets(uid)]);
+
         if (!didSubscribeRef.current) {
           didSubscribeRef.current = true;
 
@@ -216,35 +333,25 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
 
                 setLocationsById((prev) => ({ ...prev, [row.user_id]: row }));
 
-                // If we don't have this user's profile yet, fetch it so marker can render
-                setProfilesById((prev) => {
-                  if (prev[row.user_id]) return prev;
-                  return prev; // unchanged; actual fetch below
-                });
+                const { data: p } = await supabase
+                  .from("profiles")
+                  .select(
+                    "id, username, display_name, photo_url, location_visibility, onboarded"
+                  )
+                  .eq("id", row.user_id)
+                  .maybeSingle<Profile>();
 
-                if (!profilesById[row.user_id]) {
-                  const { data: p } = await supabase
-                    .from("profiles")
-                    .select(
-                      "id, username, display_name, photo_url, location_visibility, onboarded"
-                    )
-                    .eq("id", row.user_id)
-                    .maybeSingle<Profile>();
-
-                  if (p) {
-                    setProfilesById((prev) => ({ ...prev, [p.id]: p }));
-                    if (p.photo_url) Image.prefetch(p.photo_url);
-                  }
+                if (p) {
+                  setProfilesById((prev) => ({ ...prev, [p.id]: p }));
+                  if (p.photo_url) Image.prefetch(p.photo_url);
                 }
               }
             )
             .subscribe();
 
-          // no cleanup needed for now; provider lives for app session
           void channel;
         }
 
-        // ✅ Add "nearby within 1 mile" ONLY if permission is granted
         const perm = await Location.getForegroundPermissionsAsync();
         if (perm.status === Location.PermissionStatus.GRANTED) {
           const pos = await Location.getCurrentPositionAsync({
@@ -258,7 +365,6 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           const combined = Array.from(new Set([...baseIds, ...nearbyIds]));
           setIds(combined);
 
-          // Load any new ids we didn't already load
           const missing = combined.filter((id) => !baseIds.includes(id));
           await loadForIds(missing);
         }
@@ -268,7 +374,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     },
-    [fetchFriendIds, fetchNearbyUserIds]
+    [fetchFriendIds, fetchMeets, fetchNearbyUserIds]
   );
 
   const setMyLiveLocation = useCallback((loc: LiveLoc) => {
@@ -283,6 +389,9 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       ids,
       profilesById,
       locationsById,
+      meets,
+      myMeetAttendanceByMeetId,
+      meetAttendeeSummaryByMeetId,
       refresh,
       setMyLiveLocation,
     }),
@@ -293,6 +402,9 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       ids,
       profilesById,
       locationsById,
+      meets,
+      myMeetAttendanceByMeetId,
+      meetAttendeeSummaryByMeetId,
       refresh,
       setMyLiveLocation,
     ]

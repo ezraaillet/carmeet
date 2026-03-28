@@ -245,6 +245,9 @@ const styles = StyleSheet.create({
   friendsPanel: {
     flex: 1,
   },
+  meetsPanel: {
+    flex: 1,
+  },
   friendsHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -460,6 +463,81 @@ const styles = StyleSheet.create({
     color: colors.offwhite,
     fontSize: 20,
     fontWeight: "700",
+  },
+  meetCard: {
+    backgroundColor: colors.charcoal,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    borderRadius: 18,
+    padding: 14,
+    gap: 8,
+  },
+  meetHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  meetTitle: {
+    color: colors.offwhite,
+    fontSize: 18,
+    fontWeight: "700",
+    flex: 1,
+  },
+  meetStatus: {
+    color: colors.primaryLight,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  meetTimeText: {
+    color: colors.offwhite,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  meetLocationText: {
+    color: colors.silver,
+    fontSize: 14,
+  },
+  meetDescription: {
+    color: colors.silver,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  meetMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  meetMetaText: {
+    color: colors.silver,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  meetAttendanceText: {
+    color: colors.primaryLight,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  meetTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 2,
+  },
+  meetTagPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: colors.gunmetal,
+    borderWidth: 1,
+    borderColor: colors.steel,
+  },
+  meetTagPillText: {
+    color: colors.offwhite,
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   /* ---------------------------

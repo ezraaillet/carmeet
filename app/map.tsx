@@ -1,5 +1,3 @@
-// app/map.tsx
-
 import * as Location from "expo-location";
 
 import {
@@ -60,6 +58,83 @@ function formatLastSeen(updatedAt?: string | null) {
   return `${d}d ago`;
 }
 
+function normalizeMeetTags(tags: unknown): string[] {
+  if (!tags) return [];
+
+  if (Array.isArray(tags)) {
+    return tags.map((tag) => String(tag).trim()).filter(Boolean);
+  }
+
+  if (typeof tags === "string") {
+    const trimmed = tags.trim();
+    if (!trimmed) return [];
+
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map((tag) => String(tag).trim()).filter(Boolean);
+        }
+      } catch {
+        return trimmed
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+      }
+    }
+
+    return trimmed
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function formatMeetWhen(startTime?: string | null, endTime?: string | null) {
+  if (!startTime) return "Time TBD";
+
+  const start = new Date(startTime);
+  const end = endTime ? new Date(endTime) : null;
+
+  if (!Number.isFinite(start.getTime())) return "Time TBD";
+
+  const startLabel = start.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  if (!end || !Number.isFinite(end.getTime())) return startLabel;
+
+  const sameDay = start.toDateString() === end.toDateString();
+  if (sameDay) {
+    const endClock = end.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+
+    return `${startLabel} - ${endClock}`;
+  }
+
+  const endLabel = end.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  return `${startLabel} → ${endLabel}`;
+}
+
+function formatMeetStatus(status?: string | null) {
+  if (!status) return "Planned";
+  return status
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 function distanceInMeters(a: LiveLoc, b: LiveLoc) {
   const avgLatRad = (((a.lat + b.lat) / 2) * Math.PI) / 180;
@@ -73,15 +148,14 @@ function distanceInMeters(a: LiveLoc, b: LiveLoc) {
 }
 
 export default function MapScreen() {
-  console.log("MAP VERSION:", Date.now());
-
   const router = useRouter();
   const mapRef = useRef<MapView | null>(null);
 
-  // ✅ Use cached map data (friends + nearby) + preloaded profiles
   const {
     profilesById,
     locationsById,
+    meets,
+    meetAttendeeSummaryByMeetId,
     loading: mapDataLoading,
     setMyLiveLocation,
   } = useMapData();
@@ -92,9 +166,8 @@ export default function MapScreen() {
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   const [checkingProfileReady, setCheckingProfileReady] = useState(true);
-  const [isProfileReady, setIsProfileReady] = useState<boolean>(true); // default true to avoid flicker pre-auth
+  const [isProfileReady, setIsProfileReady] = useState<boolean>(true);
 
-  // NEW: GPS fix gate
   const [gotFix, setGotFix] = useState(false);
 
   const [region, setRegion] = useState<Region>({
@@ -104,14 +177,14 @@ export default function MapScreen() {
     longitudeDelta: 0.05,
   });
 
-  // ---- selected profile card state ----
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [sendingRequest, setSendingRequest] = useState(false);
 
-  // ---------------- Auth state ----------------
+  const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
+
   useEffect(() => {
     let mounted = true;
 
@@ -138,12 +211,10 @@ export default function MapScreen() {
     };
   }, []);
 
-  // Check whether required profile data exists when auth/user changes
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      // Not signed in: block map access
       if (!authed || !myUserId) {
         setCheckingProfileReady(false);
         setIsProfileReady(false);
@@ -162,12 +233,9 @@ export default function MapScreen() {
           location_visibility: string | null;
         }>();
 
-      console.log(data);
-
       if (cancelled) return;
 
       if (error) {
-        console.warn("profile readiness check error:", error.message);
         setIsProfileReady(false);
       } else {
         setIsProfileReady(hasMapProfileData(data));
@@ -194,7 +262,6 @@ export default function MapScreen() {
     }
   }, [checkingAuth, checkingProfileReady, authed, isProfileReady, router]);
 
-  // -------------- Permissions --------------
   useEffect(() => {
     (async () => {
       const fg = await Location.requestForegroundPermissionsAsync();
@@ -203,15 +270,11 @@ export default function MapScreen() {
         return;
       }
 
-      // Ask for “Always”
-      const bg = await Location.requestBackgroundPermissionsAsync();
-      console.log("BG permission:", bg.status);
-
+      await Location.requestBackgroundPermissionsAsync();
       setHasPermission(true);
     })();
   }, []);
 
-  // -------------- Upsert my location --------------
   const upsertMyLocation = useCallback(
     async (lat: number, lng: number, heading?: number, speed?: number) => {
       const {
@@ -233,7 +296,6 @@ export default function MapScreen() {
     []
   );
 
-  // -------------- Watch while focused --------------
   useFocusEffect(
     useCallback(() => {
       if (!hasPermission || !authed || !isProfileReady) return;
@@ -249,7 +311,6 @@ export default function MapScreen() {
 
           if (cancelled) return;
 
-          // ✅ Update local cache immediately so your marker snaps to true current position
           const uid =
             myUserId ?? (await supabase.auth.getUser()).data.user?.id ?? null;
           if (uid) {
@@ -293,7 +354,6 @@ export default function MapScreen() {
               timeInterval: 3000,
             },
             async ({ coords }) => {
-              // ✅ Keep local cache in sync so your marker moves immediately
               if (myUserId) {
                 setMyLiveLocation({
                   user_id: myUserId,
@@ -345,10 +405,8 @@ export default function MapScreen() {
     ])
   );
 
-  // ✅ Replace local "all" with cached locations
   const all = locationsById;
 
-  // -------------- Cluster nearby users + anti-collision for small groups --------------
   const mapMarkers = useMemo(() => {
     const nearbyThresholdMeters = 40;
     const usersWithProfiles = Object.values(all).filter(
@@ -452,15 +510,30 @@ export default function MapScreen() {
     return renderedMarkers;
   }, [all, profilesById]);
 
-  // -------------- Load selected profile when clicking marker --------------
+  const meetMarkers = useMemo(() => {
+    return meets
+      .filter((meet) => Number.isFinite(meet.latitude) && Number.isFinite(meet.longitude))
+      .map((meet) => ({
+        ...meet,
+        latitude: Number(meet.latitude),
+        longitude: Number(meet.longitude),
+        tags: normalizeMeetTags(meet.tags),
+      }));
+  }, [meets]);
+
+  const selectedMeet = useMemo(() => {
+    if (!selectedMeetId) return null;
+    return meetMarkers.find((meet) => meet.id === selectedMeetId) ?? null;
+  }, [selectedMeetId, meetMarkers]);
+
   const handleMarkerPress = useCallback(
     async (userId: string) => {
       if (!userId || userId === myUserId) return;
 
+      setSelectedMeetId(null);
       setSelectedUserId(userId);
       setProfileError(null);
 
-      // ✅ If we already have it in cache, use it immediately
       const cached = profilesById[userId];
       if (cached) {
         setSelectedProfile(cached);
@@ -468,7 +541,6 @@ export default function MapScreen() {
         return;
       }
 
-      // fallback (should be rare once preloading is working)
       setProfileLoading(true);
       setSelectedProfile(null);
 
@@ -508,7 +580,6 @@ export default function MapScreen() {
       });
 
       if (error) {
-        console.warn("Friend request error:", error.message);
         setProfileError(error.message);
       } else {
         setProfileError(null);
@@ -518,7 +589,6 @@ export default function MapScreen() {
     }
   }, [myUserId, selectedUserId]);
 
-  // UI: block map if required profile data is missing
   if (checkingAuth || checkingProfileReady) {
     return (
       <View style={styles.center}>
@@ -556,7 +626,6 @@ export default function MapScreen() {
     );
   }
 
-  // -------------- Loader logic --------------
   const showLoader =
     !authed ||
     hasPermission === null ||
@@ -580,7 +649,6 @@ export default function MapScreen() {
     );
   }
 
-  // -------------- Map + overlay card --------------
   const displayName =
     selectedProfile?.display_name ||
     selectedProfile?.username ||
@@ -606,7 +674,25 @@ export default function MapScreen() {
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
       >
-        {/* ✅ Render user markers + 3+ cluster bubbles for crowded spots */}
+        {meetMarkers.map((meet) => (
+          <Marker
+            key={`meet-${meet.id}`}
+            coordinate={{ latitude: meet.latitude, longitude: meet.longitude }}
+            title={meet.title || "Meet"}
+            description={
+              meet.tags.length > 0
+                ? `Tags: ${meet.tags.slice(0, 3).join(", ")}`
+                : meet.location_name || meet.address || "Car meet"
+            }
+            pinColor="#f97316"
+            zIndex={400}
+            onPress={() => {
+              closeProfileCard();
+              setSelectedMeetId(meet.id);
+            }}
+          />
+        ))}
+
         {mapMarkers.map((item) => {
           if (item.type === "cluster") {
             return (
@@ -618,10 +704,8 @@ export default function MapScreen() {
                 description={`${item.count} people nearby`}
                 zIndex={1000}
                 onPress={() => {
-                  setSelectedUserId(null);
-                  setSelectedProfile(null);
-                  setProfileError(null);
-                  setProfileLoading(false);
+                  closeProfileCard();
+                  setSelectedMeetId(null);
                 }}
               >
                 <View style={styles.clusterBubble}>
@@ -646,8 +730,6 @@ export default function MapScreen() {
 
           const fresh = isFresh(loc.updated_at, 2 * 60 * 1000);
           const lastSeen = formatLastSeen(loc.updated_at);
-
-          // ✅ Use actual profile photo for marker
           const markerUri = p?.photo_url ?? null;
 
           return (
@@ -679,8 +761,48 @@ export default function MapScreen() {
         })}
       </MapView>
 
-      {/* Small profile card overlay */}
-      {selectedUserId && (
+      {selectedMeet && (
+        <View style={styles.cardContainer}>
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardName}>{selectedMeet.title || "Meet"}</Text>
+                <Text style={styles.cardSub}>
+                  {selectedMeet.location_name || selectedMeet.address || "Location TBD"}
+                </Text>
+                <Text style={styles.cardSubSmall}>
+                  {formatMeetWhen(selectedMeet.start_time, selectedMeet.end_time)}
+                </Text>
+                <Text style={styles.cardSubSmall}>
+                  {formatMeetStatus(selectedMeet.status)} · {meetAttendeeSummaryByMeetId[selectedMeet.id]?.confirmed ?? 0} confirmed
+                </Text>
+              </View>
+
+              <Pressable onPress={() => setSelectedMeetId(null)} style={styles.closeBtn}>
+                <Text style={styles.closeBtnText}>✕</Text>
+              </Pressable>
+            </View>
+
+            {selectedMeet.description ? (
+              <Text style={styles.meetDescriptionText} numberOfLines={3}>
+                {selectedMeet.description}
+              </Text>
+            ) : null}
+
+            {normalizeMeetTags(selectedMeet.tags).length > 0 && (
+              <View style={styles.meetTagsRow}>
+                {normalizeMeetTags(selectedMeet.tags).map((tag) => (
+                  <View key={`${selectedMeet.id}-${tag}`} style={styles.meetTagPill}>
+                    <Text style={styles.meetTagPillText}>#{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
+      {selectedUserId && !selectedMeetId && (
         <View style={styles.cardContainer}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -698,9 +820,7 @@ export default function MapScreen() {
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={styles.cardName}>{displayName}</Text>
                 {selectedProfile?.username && (
-                  <Text style={styles.cardSub}>
-                    @{selectedProfile.username}
-                  </Text>
+                  <Text style={styles.cardSub}>@{selectedProfile.username}</Text>
                 )}
                 {selectedProfile?.location_visibility && (
                   <Text style={styles.cardSubSmall}>
@@ -710,8 +830,7 @@ export default function MapScreen() {
 
                 {locationsById[selectedUserId]?.updated_at && (
                   <Text style={styles.cardSubSmall}>
-                    Last seen:{" "}
-                    {formatLastSeen(locationsById[selectedUserId]?.updated_at)}
+                    Last seen: {formatLastSeen(locationsById[selectedUserId]?.updated_at)}
                   </Text>
                 )}
               </View>
@@ -727,9 +846,7 @@ export default function MapScreen() {
               </View>
             )}
 
-            {profileError && (
-              <Text style={styles.errorText}>{profileError}</Text>
-            )}
+            {profileError && <Text style={styles.errorText}>{profileError}</Text>}
 
             <View style={styles.cardActions}>
               <Pressable
