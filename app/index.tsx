@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { useEffect, useMemo, useState } from "react";
+import MapView, { Marker } from "react-native-maps";
 
 import styles from "@/styles/homestyles";
 import { useMapData } from "@/components/MapDataProvider";
@@ -139,12 +140,34 @@ function parseMeetDateInput(value: string) {
   return parsed.toISOString();
 }
 
+function formatMeetDateLabel(value: string) {
+  const parsed = new Date(`${value}T12:00:00`);
+  if (!Number.isFinite(parsed.getTime())) return value;
+
+  return parsed.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatMeetTimeLabel(value: string) {
+  const parsed = new Date(`2000-01-01T${value}:00`);
+  if (!Number.isFinite(parsed.getTime())) return value;
+
+  return parsed.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export default function Home() {
   const router = useRouter();
   const {
     ids,
     profilesById,
     myUserId,
+    locationsById,
     loading: mapLoading,
     meets,
     myMeetAttendanceByMeetId,
@@ -173,6 +196,57 @@ export default function Home() {
   const [meetLocationInput, setMeetLocationInput] = useState("");
   const [meetDescriptionInput, setMeetDescriptionInput] = useState("");
   const [meetStartInput, setMeetStartInput] = useState("");
+  const [meetDateInput, setMeetDateInput] = useState<string | null>(null);
+  const [meetTimeInput, setMeetTimeInput] = useState<string | null>(null);
+  const [meetLocationPin, setMeetLocationPin] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+
+  const meetDateOptions = useMemo(() => {
+    const next14Days = Array.from({ length: 14 }, (_, idx) => {
+      const nextDate = new Date();
+      nextDate.setDate(nextDate.getDate() + idx);
+      return nextDate.toISOString().slice(0, 10);
+    });
+    return next14Days;
+  }, []);
+
+  const meetTimeOptions = useMemo(() => {
+    return [
+      "06:00",
+      "07:00",
+      "08:00",
+      "09:00",
+      "10:00",
+      "11:00",
+      "12:00",
+      "13:00",
+      "14:00",
+      "15:00",
+      "16:00",
+      "17:00",
+      "18:00",
+      "19:00",
+      "20:00",
+      "21:00",
+      "22:00",
+      "23:00",
+    ];
+  }, []);
+
+  const meetInitialRegion = useMemo(() => {
+    const myLocation = myUserId ? locationsById[myUserId] : null;
+    const fallbackLat = 37.7749;
+    const fallbackLng = -122.4194;
+
+    return {
+      latitude: myLocation?.latitude ?? fallbackLat,
+      longitude: myLocation?.longitude ?? fallbackLng,
+      latitudeDelta: 0.08,
+      longitudeDelta: 0.08,
+    };
+  }, [locationsById, myUserId]);
 
   const cleanEmail = useMemo(() => (email ?? "").trim(), [email]);
   const canSubmit = useMemo(
@@ -387,6 +461,9 @@ export default function Home() {
     setMeetLocationInput("");
     setMeetDescriptionInput("");
     setMeetStartInput("");
+    setMeetDateInput(null);
+    setMeetTimeInput(null);
+    setMeetLocationPin(null);
     setCreateMeetVisible(true);
   }
 
@@ -401,22 +478,27 @@ export default function Home() {
     const title = meetTitleInput.trim();
     const locationName = meetLocationInput.trim();
     const description = meetDescriptionInput.trim();
-    const parsedStart = parseMeetDateInput(meetStartInput);
+    const composedStartInput =
+      meetDateInput && meetTimeInput ? `${meetDateInput} ${meetTimeInput}` : meetStartInput;
+    const parsedStart = parseMeetDateInput(composedStartInput);
 
     if (!title) {
       Alert.alert("Meet title required", "Add a title to create your meet.");
       return;
     }
 
-    if (!locationName) {
-      Alert.alert("Location required", "Add a location name for your meet.");
+    if (!locationName && !meetLocationPin) {
+      Alert.alert(
+        "Location required",
+        "Type an address/location name or drop a pin on the map."
+      );
       return;
     }
 
-    if (meetStartInput.trim().length > 0 && !parsedStart) {
+    if (!meetDateInput || !meetTimeInput || !parsedStart) {
       Alert.alert(
-        "Invalid date",
-        "Use YYYY-MM-DD HH:MM (or YYYY-MM-DDTHH:MM) for the start time."
+        "Start time required",
+        "Pick a date and time for when the meet starts."
       );
       return;
     }
@@ -428,7 +510,10 @@ export default function Home() {
         .from("meets")
         .insert({
           title,
-          location_name: locationName,
+          location_name: locationName || "Pinned location",
+          address: locationName || null,
+          latitude: meetLocationPin?.latitude ?? null,
+          longitude: meetLocationPin?.longitude ?? null,
           description: description || null,
           start_time: parsedStart,
           created_by: myUserId,
@@ -916,21 +1001,88 @@ export default function Home() {
             />
 
             <TextInput
-              placeholder="Location name"
+              placeholder="Address or location name"
               placeholderTextColor="#8A8A8A"
               style={styles.homeInput}
               value={meetLocationInput}
               onChangeText={setMeetLocationInput}
             />
 
-            <TextInput
-              placeholder="Start time (YYYY-MM-DD HH:MM)"
-              placeholderTextColor="#8A8A8A"
-              style={styles.homeInput}
-              value={meetStartInput}
-              onChangeText={setMeetStartInput}
-              autoCapitalize="none"
-            />
+            <Text style={styles.createMeetFieldLabel}>Start date</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.createMeetChipRow}
+            >
+              {meetDateOptions.map((option) => {
+                const selected = meetDateInput === option;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => setMeetDateInput(option)}
+                    style={({ pressed }) => [
+                      styles.createMeetChip,
+                      selected && styles.createMeetChipSelected,
+                      pressed && styles.createMeetChipPressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.createMeetChipText,
+                        selected && styles.createMeetChipTextSelected,
+                      ]}
+                    >
+                      {formatMeetDateLabel(option)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Text style={styles.createMeetFieldLabel}>Start time</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.createMeetChipRow}
+            >
+              {meetTimeOptions.map((option) => {
+                const selected = meetTimeInput === option;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => setMeetTimeInput(option)}
+                    style={({ pressed }) => [
+                      styles.createMeetChip,
+                      selected && styles.createMeetChipSelected,
+                      pressed && styles.createMeetChipPressed,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.createMeetChipText,
+                        selected && styles.createMeetChipTextSelected,
+                      ]}
+                    >
+                      {formatMeetTimeLabel(option)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Text style={styles.createMeetFieldLabel}>Pick a spot on the map (optional)</Text>
+            <MapView
+              style={styles.createMeetMap}
+              initialRegion={meetInitialRegion}
+              onPress={(event) => setMeetLocationPin(event.nativeEvent.coordinate)}
+            >
+              {meetLocationPin ? <Marker coordinate={meetLocationPin} /> : null}
+            </MapView>
+            <Text style={styles.createMeetMapHint}>
+              {meetLocationPin
+                ? `Pinned: ${meetLocationPin.latitude.toFixed(5)}, ${meetLocationPin.longitude.toFixed(5)}`
+                : "Tap anywhere on the map to drop a pin."}
+            </Text>
 
             <TextInput
               placeholder="Description (optional)"
