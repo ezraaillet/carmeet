@@ -112,6 +112,9 @@ function RootLayoutInner() {
       setPendingRequests([]);
       setPendingCount(0);
       setNotifOpen(false);
+      // Clear user-scoped map/profile caches on logout.
+      // @ts-ignore
+      void refresh(null);
       return;
     }
 
