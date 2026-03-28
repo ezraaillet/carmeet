@@ -172,6 +172,8 @@ export default function Home() {
   const [meetEndTimeInput, setMeetEndTimeInput] = useState<string | null>(null);
   const [meetMaxAttendeesInput, setMeetMaxAttendeesInput] = useState("");
   const [updatingAttendanceMeetId, setUpdatingAttendanceMeetId] = useState<string | null>(null);
+  const [meetSearchTitleInput, setMeetSearchTitleInput] = useState("");
+  const [meetSearchDateInput, setMeetSearchDateInput] = useState<string | null>(null);
 
   const meetDateOptions = useMemo(() => {
     const next14Days = Array.from({ length: 14 }, (_, idx) => {
@@ -237,6 +239,35 @@ export default function Home() {
       };
     });
   }, [meets, meetAttendeeSummaryByMeetId, myMeetAttendanceByMeetId]);
+
+  const filteredMeetCards = useMemo(() => {
+    const normalizedTitle = meetSearchTitleInput.trim().toLowerCase();
+
+    return meetCards.filter((meet) => {
+      const normalizedStatus = (meet.status ?? "").toLowerCase();
+      if (normalizedStatus === "cancelled") return false;
+
+      const meetsTitleFilter = normalizedTitle
+        ? (meet.title ?? "").toLowerCase().includes(normalizedTitle)
+        : true;
+
+      const meetsDateFilter = meetSearchDateInput
+        ? (() => {
+            if (!meet.start_time) return false;
+            const startDate = new Date(meet.start_time);
+            if (!Number.isFinite(startDate.getTime())) return false;
+            const year = startDate.getFullYear();
+            const month = String(startDate.getMonth() + 1).padStart(2, "0");
+            const day = String(startDate.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}` === meetSearchDateInput;
+          })()
+        : true;
+
+      return meetsTitleFilter && meetsDateFilter;
+    });
+  }, [meetCards, meetSearchDateInput, meetSearchTitleInput]);
+
+  const hasMeetFilters = Boolean(meetSearchTitleInput.trim() || meetSearchDateInput);
 
   async function routeAfterAuth(uid: string) {
     const { data, error } = await supabase
@@ -813,9 +844,9 @@ export default function Home() {
                       <View style={styles.friendsHeaderTextWrap}>
                         <Text style={styles.friendsTitle}>Upcoming meets</Text>
                         <Text style={styles.friendsSubtitle}>
-                          {meetCards.length === 0
+                          {filteredMeetCards.length === 0
                             ? "No meets yet. Create one to get your crew together."
-                            : `${meetCards.length} meet${meetCards.length === 1 ? "" : "s"} available.`}
+                            : `${filteredMeetCards.length} meet${filteredMeetCards.length === 1 ? "" : "s"} available.`}
                         </Text>
                       </View>
 
@@ -842,16 +873,78 @@ export default function Home() {
                       </View>
                     </View>
 
+                    <View style={styles.meetsSearchWrap}>
+                      <TextInput
+                        placeholder="Search by meet title"
+                        placeholderTextColor="#8892A6"
+                        value={meetSearchTitleInput}
+                        onChangeText={setMeetSearchTitleInput}
+                        style={styles.homeInput}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.meetsFilterChipRow}
+                      >
+                        {meetDateOptions.map((option) => {
+                          const selected = option === meetSearchDateInput;
+                          return (
+                            <Pressable
+                              key={`search-date-${option}`}
+                              onPress={() =>
+                                setMeetSearchDateInput((current) =>
+                                  current === option ? null : option
+                                )
+                              }
+                              style={({ pressed }) => [
+                                styles.createMeetChip,
+                                selected && styles.createMeetChipSelected,
+                                pressed && styles.createMeetChipPressed,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.createMeetChipText,
+                                  selected && styles.createMeetChipTextSelected,
+                                ]}
+                              >
+                                {formatMeetDateLabel(option)}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+
+                      {hasMeetFilters && (
+                        <Pressable
+                          onPress={() => {
+                            setMeetSearchTitleInput("");
+                            setMeetSearchDateInput(null);
+                          }}
+                          style={({ pressed }) => [
+                            styles.meetsClearFiltersButton,
+                            pressed && styles.friendsRefreshButtonPressed,
+                          ]}
+                        >
+                          <Text style={styles.friendsRefreshButtonText}>Clear filters</Text>
+                        </Pressable>
+                      )}
+                    </View>
+
                     {mapLoading ? (
                       <View style={styles.friendsEmptyState}>
                         <ActivityIndicator />
                         <Text style={styles.homeTabContentText}>Loading meets…</Text>
                       </View>
-                    ) : meetCards.length === 0 ? (
+                    ) : filteredMeetCards.length === 0 ? (
                       <View style={styles.friendsEmptyState}>
                         <Text style={styles.friendsEmptyTitle}>No meets found</Text>
                         <Text style={styles.homeTabContentText}>
-                          Public meets and your joined meets will appear here.
+                          {hasMeetFilters
+                            ? "Try a different title or date filter."
+                            : "Public meets and your joined meets will appear here."}
                         </Text>
                       </View>
                     ) : (
@@ -859,7 +952,7 @@ export default function Home() {
                         contentContainerStyle={styles.friendsList}
                         showsVerticalScrollIndicator={false}
                       >
-                        {meetCards.map((meet) => (
+                        {filteredMeetCards.map((meet) => (
                           <View key={meet.id} style={styles.meetCard}>
                             {!!meet.cover_image_url && (
                               <Image

@@ -309,6 +309,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
+  meetsSearchWrap: {
+    gap: 10,
+    marginBottom: 14,
+  },
+  meetsFilterChipRow: {
+    gap: 8,
+    paddingRight: 6,
+  },
+  meetsClearFiltersButton: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.gunmetal,
+    borderWidth: 1,
+    borderColor: colors.steel,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
   friendsList: {
     gap: 12,
     paddingBottom: 20,
