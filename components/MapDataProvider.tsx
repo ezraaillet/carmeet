@@ -66,6 +66,7 @@ type MapDataState = {
   loading: boolean;
   error: string | null;
   myUserId: string | null;
+  friendIds: string[];
   ids: string[];
   profilesById: Record<string, Profile>;
   locationsById: Record<string, LiveLoc>;
@@ -114,6 +115,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [friendIds, setFriendIds] = useState<string[]>([]);
   const [ids, setIds] = useState<string[]>([]);
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({});
   const [locationsById, setLocationsById] = useState<Record<string, LiveLoc>>(
@@ -147,9 +149,13 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       status: string;
     }[];
 
-    return rows
-      .map((r) => (r.user_id === uid ? r.friend_id : r.user_id))
-      .filter((id): id is string => Boolean(id));
+    return Array.from(
+      new Set(
+        rows
+          .map((r) => (r.user_id === uid ? r.friend_id : r.user_id))
+          .filter((id): id is string => Boolean(id))
+      )
+    );
   }, []);
 
   const fetchNearbyUserIds = useCallback(
@@ -319,6 +325,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         currentUserIdRef.current = uid;
 
         if (previousUid !== uid) {
+          setFriendIds([]);
           setIds([]);
           setProfilesById({});
           setLocationsById({});
@@ -328,11 +335,13 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (!uid) {
+          setFriendIds([]);
           return;
         }
 
         const friendIds = await fetchFriendIds(uid);
         if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
+        setFriendIds(friendIds);
         const baseIds = Array.from(new Set([uid, ...friendIds]));
         setIds(baseIds);
 
@@ -454,6 +463,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       loading,
       error,
       myUserId,
+      friendIds,
       ids,
       profilesById,
       locationsById,
@@ -468,6 +478,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       loading,
       error,
       myUserId,
+      friendIds,
       ids,
       profilesById,
       locationsById,
