@@ -251,9 +251,15 @@ const styles = StyleSheet.create({
   friendsHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
     gap: 12,
     marginBottom: 16,
+  },
+  friendsHeaderTextWrap: {
+    flexShrink: 1,
+    minWidth: 180,
+    paddingRight: 8,
   },
   friendsTitle: {
     color: colors.offwhite,
@@ -280,6 +286,28 @@ const styles = StyleSheet.create({
     color: colors.offwhite,
     fontSize: 14,
     fontWeight: "600",
+  },
+  meetHeaderActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  meetCreateButton: {
+    backgroundColor: colors.primary,
+    borderWidth: 1,
+    borderColor: colors.primaryDark,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+  },
+  meetCreateButtonPressed: {
+    opacity: 0.85,
+  },
+  meetCreateButtonText: {
+    color: colors.black,
+    fontSize: 14,
+    fontWeight: "700",
   },
   friendsList: {
     gap: 12,
@@ -450,6 +478,38 @@ const styles = StyleSheet.create({
     color: colors.silver,
     fontSize: 13,
     lineHeight: 19,
+  },
+  createMeetModalCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: colors.charcoal,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    padding: 18,
+  },
+  createMeetModalTitle: {
+    color: colors.offwhite,
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  createMeetModalSubtitle: {
+    color: colors.silver,
+    fontSize: 14,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  createMeetDescriptionInput: {
+    minHeight: 88,
+  },
+  createMeetActionsRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    gap: 10,
+  },
+  createMeetActionButton: {
+    marginTop: 0,
+    flex: 1,
   },
   friendsEmptyState: {
     flex: 1,

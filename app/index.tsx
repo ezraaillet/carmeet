@@ -123,6 +123,22 @@ function formatMeetStatus(status?: string | null) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function parseMeetDateInput(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const normalized = /^\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}$/.test(trimmed)
+    ? trimmed.replace(" ", "T")
+    : trimmed;
+  const parsed = new Date(normalized);
+
+  if (!Number.isFinite(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString();
+}
+
 export default function Home() {
   const router = useRouter();
   const {
@@ -151,6 +167,12 @@ export default function Home() {
   const [removingFriendId, setRemovingFriendId] = useState<string | null>(null);
 
   const [authMode, setAuthMode] = useState<AuthMode>(null);
+  const [createMeetVisible, setCreateMeetVisible] = useState(false);
+  const [creatingMeet, setCreatingMeet] = useState(false);
+  const [meetTitleInput, setMeetTitleInput] = useState("");
+  const [meetLocationInput, setMeetLocationInput] = useState("");
+  const [meetDescriptionInput, setMeetDescriptionInput] = useState("");
+  const [meetStartInput, setMeetStartInput] = useState("");
 
   const cleanEmail = useMemo(() => (email ?? "").trim(), [email]);
   const canSubmit = useMemo(
@@ -358,6 +380,81 @@ export default function Home() {
 
   async function handleRefreshFriends() {
     await refresh(myUserId);
+  }
+
+  function openCreateMeetModal() {
+    setMeetTitleInput("");
+    setMeetLocationInput("");
+    setMeetDescriptionInput("");
+    setMeetStartInput("");
+    setCreateMeetVisible(true);
+  }
+
+  function closeCreateMeetModal() {
+    if (creatingMeet) return;
+    setCreateMeetVisible(false);
+  }
+
+  async function handleCreateMeet() {
+    if (!myUserId || creatingMeet) return;
+
+    const title = meetTitleInput.trim();
+    const locationName = meetLocationInput.trim();
+    const description = meetDescriptionInput.trim();
+    const parsedStart = parseMeetDateInput(meetStartInput);
+
+    if (!title) {
+      Alert.alert("Meet title required", "Add a title to create your meet.");
+      return;
+    }
+
+    if (!locationName) {
+      Alert.alert("Location required", "Add a location name for your meet.");
+      return;
+    }
+
+    if (meetStartInput.trim().length > 0 && !parsedStart) {
+      Alert.alert(
+        "Invalid date",
+        "Use YYYY-MM-DD HH:MM (or YYYY-MM-DDTHH:MM) for the start time."
+      );
+      return;
+    }
+
+    try {
+      setCreatingMeet(true);
+
+      const { data: createdMeet, error: createMeetError } = await supabase
+        .from("meets")
+        .insert({
+          title,
+          location_name: locationName,
+          description: description || null,
+          start_time: parsedStart,
+          created_by: myUserId,
+          is_public: true,
+          status: "planned",
+        })
+        .select("id")
+        .single<{ id: string }>();
+
+      if (createMeetError || !createdMeet?.id) {
+        throw createMeetError || new Error("Could not create meet.");
+      }
+
+      await supabase.from("meet_attendees").insert({
+        meet_id: createdMeet.id,
+        user_id: myUserId,
+        status: "host",
+      });
+
+      await refresh(myUserId);
+      setCreateMeetVisible(false);
+    } catch (err: any) {
+      Alert.alert("Could not create meet", err?.message ?? "Please try again.");
+    } finally {
+      setCreatingMeet(false);
+    }
   }
 
   async function confirmRemoveFriend(friend: FriendProfile) {
@@ -577,7 +674,7 @@ export default function Home() {
                 ) : (
                   <View style={styles.meetsPanel}>
                     <View style={styles.friendsHeaderRow}>
-                      <View>
+                      <View style={styles.friendsHeaderTextWrap}>
                         <Text style={styles.friendsTitle}>Upcoming meets</Text>
                         <Text style={styles.friendsSubtitle}>
                           {meetCards.length === 0
@@ -586,15 +683,27 @@ export default function Home() {
                         </Text>
                       </View>
 
-                      <Pressable
-                        onPress={handleRefreshFriends}
-                        style={({ pressed }) => [
-                          styles.friendsRefreshButton,
-                          pressed && styles.friendsRefreshButtonPressed,
-                        ]}
-                      >
-                        <Text style={styles.friendsRefreshButtonText}>Refresh</Text>
-                      </Pressable>
+                      <View style={styles.meetHeaderActions}>
+                        <Pressable
+                          onPress={openCreateMeetModal}
+                          style={({ pressed }) => [
+                            styles.meetCreateButton,
+                            pressed && styles.meetCreateButtonPressed,
+                          ]}
+                        >
+                          <Text style={styles.meetCreateButtonText}>Create Meet</Text>
+                        </Pressable>
+
+                        <Pressable
+                          onPress={handleRefreshFriends}
+                          style={({ pressed }) => [
+                            styles.friendsRefreshButton,
+                            pressed && styles.friendsRefreshButtonPressed,
+                          ]}
+                        >
+                          <Text style={styles.friendsRefreshButtonText}>Refresh</Text>
+                        </Pressable>
+                      </View>
                     </View>
 
                     {mapLoading ? (
@@ -778,6 +887,92 @@ export default function Home() {
           )}
         </View>
       </KeyboardAvoidingView>
+
+      <Modal
+        animationType="slide"
+        transparent
+        visible={createMeetVisible}
+        onRequestClose={closeCreateMeetModal}
+      >
+        <Pressable
+          style={styles.friendModalBackdrop}
+          onPress={closeCreateMeetModal}
+        >
+          <Pressable
+            style={styles.createMeetModalCard}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text style={styles.createMeetModalTitle}>Create a meet</Text>
+            <Text style={styles.createMeetModalSubtitle}>
+              Share it publicly so your crew can join.
+            </Text>
+
+            <TextInput
+              placeholder="Meet title"
+              placeholderTextColor="#8A8A8A"
+              style={styles.homeInput}
+              value={meetTitleInput}
+              onChangeText={setMeetTitleInput}
+            />
+
+            <TextInput
+              placeholder="Location name"
+              placeholderTextColor="#8A8A8A"
+              style={styles.homeInput}
+              value={meetLocationInput}
+              onChangeText={setMeetLocationInput}
+            />
+
+            <TextInput
+              placeholder="Start time (YYYY-MM-DD HH:MM)"
+              placeholderTextColor="#8A8A8A"
+              style={styles.homeInput}
+              value={meetStartInput}
+              onChangeText={setMeetStartInput}
+              autoCapitalize="none"
+            />
+
+            <TextInput
+              placeholder="Description (optional)"
+              placeholderTextColor="#8A8A8A"
+              style={[styles.homeInput, styles.createMeetDescriptionInput]}
+              value={meetDescriptionInput}
+              onChangeText={setMeetDescriptionInput}
+              multiline
+              textAlignVertical="top"
+            />
+
+            <View style={styles.createMeetActionsRow}>
+              <Pressable
+                onPress={closeCreateMeetModal}
+                disabled={creatingMeet}
+                style={({ pressed }) => [
+                  styles.homeSecondaryBtn,
+                  styles.createMeetActionButton,
+                  pressed && !creatingMeet && styles.homeSecondaryBtnPressed,
+                ]}
+              >
+                <Text style={styles.homeSecondaryBtnText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleCreateMeet}
+                disabled={creatingMeet}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.createMeetActionButton,
+                  creatingMeet && { opacity: 0.6 },
+                  pressed && !creatingMeet && styles.buttonPressed,
+                ]}
+              >
+                <Text style={styles.buttonText}>
+                  {creatingMeet ? "Creating..." : "Create"}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         animationType="fade"
