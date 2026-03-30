@@ -206,7 +206,7 @@ export default function MapScreen() {
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
-  const [checkingProfileReady, setCheckingProfileReady] = useState(true);
+  const [, setCheckingProfileReady] = useState(true);
   const [, setIsProfileReady] = useState<boolean>(true);
 
   const [gotFix, setGotFix] = useState(false);
@@ -733,7 +733,7 @@ export default function MapScreen() {
     }
   }, [myUserId, selectedUserId, canUseProfileGatedActions]);
 
-  if (checkingAuth || checkingProfileReady) {
+  if (checkingAuth) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />
@@ -766,13 +766,11 @@ export default function MapScreen() {
     );
   }
 
-  const showLoader =
-    !authed ||
-    hasPermission === null ||
-    mapDataLoading ||
-    (hasPermission && !gotFix);
+  const showBlockingLoader = !authed || hasPermission === null;
+  const showLocationOverlay = hasPermission === true && !gotFix;
+  const showMapDataOverlay = mapDataLoading;
 
-  if (showLoader) {
+  if (showBlockingLoader) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />
@@ -892,6 +890,36 @@ export default function MapScreen() {
           );
         })}
       </MapView>
+
+      {(showLocationOverlay || showMapDataOverlay) && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 14,
+            left: 14,
+            right: 14,
+            alignItems: "center",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: "rgba(0,0,0,0.62)",
+              borderRadius: 999,
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <ActivityIndicator size="small" color="#fff" />
+            <Text style={{ color: "#fff", fontWeight: "600" }}>
+              {showLocationOverlay ? "Getting your location…" : "Loading map data…"}
+            </Text>
+          </View>
+        </View>
+      )}
 
       {selectedMeet && (
         <View style={styles.cardContainer}>
