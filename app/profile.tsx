@@ -312,7 +312,7 @@ export default function ProfileScreen() {
     }
   }
 
-  const loading = loadingLocal || mapDataLoading;
+  const loading = !profile && (loadingLocal || mapDataLoading);
   const hasLocation = Boolean(city || state);
   const locationText = [city, state].filter(Boolean).join(", ");
 
