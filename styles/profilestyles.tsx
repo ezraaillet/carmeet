@@ -192,6 +192,78 @@ const profileStyles = StyleSheet.create({
     lineHeight: 20,
   },
 
+  carsHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+
+  addCarCard: {
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    backgroundColor: colors.black,
+  },
+
+  primaryToggle: {
+    borderWidth: 1,
+    borderColor: colors.steel,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    backgroundColor: colors.charcoal,
+  },
+
+  primaryToggleActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+
+  primaryToggleText: {
+    color: colors.offwhite,
+    fontWeight: "600",
+  },
+
+  primaryToggleTextActive: {
+    color: "#fff",
+  },
+
+  carsLoadingWrap: {
+    gap: 8,
+  },
+
+  carCard: {
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 10,
+    backgroundColor: colors.black,
+  },
+
+  carImage: {
+    width: "100%",
+    height: 170,
+    borderRadius: 8,
+    marginBottom: 10,
+    backgroundColor: colors.charcoal,
+  },
+
+  carTitle: {
+    color: colors.offwhite,
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+
+  carMeta: {
+    color: colors.silver,
+  },
+
   primaryBtn: {
     backgroundColor: colors.primary,
     paddingVertical: 12,
