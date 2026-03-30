@@ -22,7 +22,7 @@ const profileStyles = StyleSheet.create({
   avatarWrap: {
     alignSelf: "center",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
 
   avatar: {
@@ -47,6 +47,43 @@ const profileStyles = StyleSheet.create({
     marginTop: 8,
     fontWeight: "600",
     color: colors.primary,
+  },
+
+  headerTextWrap: {
+    alignItems: "center",
+    marginBottom: 14,
+  },
+
+  displayNameText: {
+    color: colors.offwhite,
+    fontWeight: "700",
+    fontSize: 24,
+  },
+
+  usernameText: {
+    marginTop: 3,
+    color: colors.silver,
+    fontWeight: "600",
+  },
+
+  bioText: {
+    marginTop: 10,
+    color: colors.offwhite,
+    textAlign: "center",
+  },
+
+  locationText: {
+    marginTop: 6,
+    color: colors.silver,
+    fontSize: 13,
+  },
+
+  headerActions: {
+    marginTop: 8,
+    marginBottom: 14,
+    flexDirection: "row",
+    alignSelf: "center",
+    gap: 12,
   },
 
   // Form fields
@@ -102,6 +139,57 @@ const profileStyles = StyleSheet.create({
     marginTop: 10,
     flexDirection: "row",
     gap: 12,
+  },
+
+  tabRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 14,
+  },
+
+  tabButton: {
+    borderWidth: 1,
+    borderColor: colors.steel,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: colors.charcoal,
+  },
+
+  tabButtonActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+
+  tabButtonText: {
+    color: colors.offwhite,
+    fontWeight: "600",
+    fontSize: 12,
+  },
+
+  tabButtonTextActive: {
+    color: "#fff",
+  },
+
+  sectionCard: {
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    borderRadius: 12,
+    padding: 14,
+    backgroundColor: colors.charcoal,
+  },
+
+  sectionTitle: {
+    color: colors.offwhite,
+    fontWeight: "700",
+    fontSize: 16,
+    marginBottom: 12,
+  },
+
+  placeholderText: {
+    color: colors.silver,
+    lineHeight: 20,
   },
 
   primaryBtn: {
