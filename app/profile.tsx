@@ -12,12 +12,13 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import s from "@/styles/profilestyles";
 import { supabase } from "../database/supabase";
 import { useMapData } from "@/components/MapDataProvider";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
 
 type ProfileRow = {
@@ -168,6 +169,13 @@ export default function ProfileScreen() {
       setActiveTab("settings");
     }
   }, [params.onboarding, profile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!myUserId) return;
+      void refresh(myUserId);
+    }, [myUserId, refresh])
+  );
 
   // -----------------------------
   // Pick + upload avatar
