@@ -36,6 +36,19 @@ type ProfileRow = {
 
 type ProfileTab = "about" | "cars" | "membership" | "settings";
 
+type CarRow = {
+  id: string;
+  user_id: string;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  trim: string | null;
+  color: string | null;
+  description: string | null;
+  photo_url: string | null;
+  is_primary: boolean | null;
+};
+
 export default function ProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ onboarding?: string }>();
@@ -58,6 +71,17 @@ export default function ProfileScreen() {
   const [city, setCity] = useState<string | null>(null);
   const [state, setState] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProfileTab>("about");
+  const [cars, setCars] = useState<CarRow[]>([]);
+  const [carsLoading, setCarsLoading] = useState(false);
+  const [carsError, setCarsError] = useState<string | null>(null);
+  const [showAddCar, setShowAddCar] = useState(false);
+  const [addingCar, setAddingCar] = useState(false);
+  const [carYear, setCarYear] = useState("");
+  const [carMake, setCarMake] = useState("");
+  const [carModel, setCarModel] = useState("");
+  const [carColor, setCarColor] = useState("");
+  const [carPhotoUrl, setCarPhotoUrl] = useState("");
+  const [carIsPrimary, setCarIsPrimary] = useState(false);
 
   const [editing, setEditing] = useState(false);
   const [loadingLocal, setLoadingLocal] = useState(true);
@@ -176,6 +200,36 @@ export default function ProfileScreen() {
       void refresh(myUserId);
     }, [myUserId, refresh])
   );
+
+  const loadCars = useCallback(async () => {
+    if (!myUserId) return;
+    setCarsLoading(true);
+    setCarsError(null);
+
+    const { data, error: loadErr } = await supabase
+      .from("cars")
+      .select(
+        "id, user_id, make, model, year, trim, color, description, photo_url, is_primary"
+      )
+      .eq("user_id", myUserId)
+      .order("is_primary", { ascending: false })
+      .order("year", { ascending: false, nullsFirst: false });
+
+    if (loadErr) {
+      setCarsError(loadErr.message);
+      setCars([]);
+      setCarsLoading(false);
+      return;
+    }
+
+    setCars((data ?? []) as CarRow[]);
+    setCarsLoading(false);
+  }, [myUserId]);
+
+  useEffect(() => {
+    if (activeTab !== "cars") return;
+    void loadCars();
+  }, [activeTab, loadCars]);
 
   // -----------------------------
   // Pick + upload avatar
@@ -312,6 +366,69 @@ export default function ProfileScreen() {
     }
   }
 
+  function resetAddCarForm() {
+    setCarYear("");
+    setCarMake("");
+    setCarModel("");
+    setCarColor("");
+    setCarPhotoUrl("");
+    setCarIsPrimary(false);
+  }
+
+  async function saveCar() {
+    if (!myUserId) return;
+
+    const parsedYear = Number.parseInt(carYear.trim(), 10);
+    if (!carMake.trim() || !carModel.trim() || Number.isNaN(parsedYear)) {
+      Alert.alert(
+        "Missing info",
+        "Please enter year, make, and model before saving."
+      );
+      return;
+    }
+
+    setAddingCar(true);
+    setCarsError(null);
+
+    const insertPayload = {
+      user_id: myUserId,
+      year: parsedYear,
+      make: carMake.trim(),
+      model: carModel.trim(),
+      color: carColor.trim() || null,
+      photo_url: carPhotoUrl.trim() || null,
+      is_primary: carIsPrimary,
+    };
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from("cars")
+      .insert(insertPayload)
+      .select(
+        "id, user_id, make, model, year, trim, color, description, photo_url, is_primary"
+      )
+      .single<CarRow>();
+
+    if (insertErr || !inserted) {
+      setCarsError(insertErr?.message ?? "Could not save car.");
+      setAddingCar(false);
+      return;
+    }
+
+    if (inserted.is_primary) {
+      await supabase
+        .from("cars")
+        .update({ is_primary: false })
+        .eq("user_id", myUserId)
+        .neq("id", inserted.id)
+        .eq("is_primary", true);
+    }
+
+    setShowAddCar(false);
+    resetAddCarForm();
+    await loadCars();
+    setAddingCar(false);
+  }
+
   const loading = !profile && (loadingLocal || mapDataLoading);
   const hasLocation = Boolean(city || state);
   const locationText = [city, state].filter(Boolean).join(", ");
@@ -364,6 +481,152 @@ export default function ProfileScreen() {
       <View style={s.sectionCard}>
         <Text style={s.sectionTitle}>{title}</Text>
         <Text style={s.placeholderText}>{text}</Text>
+      </View>
+    );
+  }
+
+  function renderCarsSection() {
+    return (
+      <View style={s.sectionCard}>
+        <View style={s.carsHeaderRow}>
+          <Text style={s.sectionTitle}>Cars</Text>
+          <Pressable
+            onPress={() => {
+              if (showAddCar) {
+                setShowAddCar(false);
+                resetAddCarForm();
+                return;
+              }
+              setShowAddCar(true);
+            }}
+            style={s.secondaryBtn}
+          >
+            <Text style={s.secondaryBtnText}>
+              {showAddCar ? "Cancel" : "Add Car"}
+            </Text>
+          </Pressable>
+        </View>
+
+        {showAddCar ? (
+          <View style={s.addCarCard}>
+            <View style={s.field}>
+              <Text style={s.label}>Year *</Text>
+              <TextInput
+                value={carYear}
+                onChangeText={setCarYear}
+                keyboardType="number-pad"
+                placeholder="2020"
+                style={s.input}
+              />
+            </View>
+
+            <View style={s.field}>
+              <Text style={s.label}>Make *</Text>
+              <TextInput
+                value={carMake}
+                onChangeText={setCarMake}
+                placeholder="Honda"
+                style={s.input}
+              />
+            </View>
+
+            <View style={s.field}>
+              <Text style={s.label}>Model *</Text>
+              <TextInput
+                value={carModel}
+                onChangeText={setCarModel}
+                placeholder="Civic"
+                style={s.input}
+              />
+            </View>
+
+            <View style={s.field}>
+              <Text style={s.label}>Color</Text>
+              <TextInput
+                value={carColor}
+                onChangeText={setCarColor}
+                placeholder="Blue"
+                style={s.input}
+              />
+            </View>
+
+            <View style={s.field}>
+              <Text style={s.label}>Photo URL</Text>
+              <TextInput
+                value={carPhotoUrl}
+                onChangeText={setCarPhotoUrl}
+                placeholder="https://..."
+                autoCapitalize="none"
+                style={s.input}
+              />
+            </View>
+
+            <Pressable
+              onPress={() => setCarIsPrimary((prev) => !prev)}
+              style={[
+                s.primaryToggle,
+                carIsPrimary && s.primaryToggleActive,
+              ]}
+            >
+              <Text
+                style={[
+                  s.primaryToggleText,
+                  carIsPrimary && s.primaryToggleTextActive,
+                ]}
+              >
+                {carIsPrimary
+                  ? "Primary car: Yes"
+                  : "Set as primary car"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={saveCar}
+              disabled={addingCar}
+              style={[s.primaryBtn, addingCar && { opacity: 0.7 }]}
+            >
+              {addingCar ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={s.primaryBtnText}>Save Car</Text>
+              )}
+            </Pressable>
+          </View>
+        ) : null}
+
+        {carsError ? <Text style={s.error}>{carsError}</Text> : null}
+
+        {carsLoading ? (
+          <View style={s.carsLoadingWrap}>
+            <ActivityIndicator />
+            <Text style={s.placeholderText}>Loading cars…</Text>
+          </View>
+        ) : cars.length === 0 ? (
+          <Text style={s.placeholderText}>
+            No cars added yet. Tap Add Car to add your first one.
+          </Text>
+        ) : (
+          cars.map((car) => (
+            <View key={car.id} style={s.carCard}>
+              {car.photo_url ? (
+                <Image source={{ uri: car.photo_url }} style={s.carImage} />
+              ) : null}
+
+              <Text style={s.carTitle}>
+                {[car.year, car.make, car.model]
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim() || "Untitled car"}
+              </Text>
+              {car.color ? (
+                <Text style={s.carMeta}>Color: {car.color}</Text>
+              ) : null}
+              <Text style={s.carMeta}>
+                {car.is_primary ? "Primary car" : "Secondary car"}
+              </Text>
+            </View>
+          ))
+        )}
       </View>
     );
   }
@@ -565,11 +828,7 @@ export default function ProfileScreen() {
         </View>
 
         {activeTab === "about" && renderAboutSection()}
-        {activeTab === "cars" &&
-          renderPlaceholderSection(
-            "Cars",
-            "Cars content is coming soon. This tab is ready for your next step."
-          )}
+        {activeTab === "cars" && renderCarsSection()}
         {activeTab === "membership" &&
           renderPlaceholderSection(
             "Membership",
