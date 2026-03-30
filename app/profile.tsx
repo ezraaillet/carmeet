@@ -26,9 +26,14 @@ type ProfileRow = {
   display_name: string | null;
   photo_url: string | null;
   location_visibility: string | null;
+  bio?: string | null;
+  city?: string | null;
+  state?: string | null;
   created_at?: string;
   onboarded?: boolean | null;
 };
+
+type ProfileTab = "about" | "cars" | "membership" | "settings";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -48,6 +53,10 @@ export default function ProfileScreen() {
   const [displayName, setDisplayName] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [locationVis, setLocationVis] = useState("everyone");
+  const [bio, setBio] = useState("");
+  const [city, setCity] = useState<string | null>(null);
+  const [state, setState] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ProfileTab>("about");
 
   const [editing, setEditing] = useState(false);
   const [loadingLocal, setLoadingLocal] = useState(true);
@@ -109,6 +118,9 @@ export default function ProfileScreen() {
           setDisplayName(cached.display_name ?? "");
           setPhotoUrl(cached.photo_url ?? null);
           setLocationVis(cached.location_visibility ?? "everyone");
+          setBio(cached.bio ?? "");
+          setCity(cached.city ?? null);
+          setState(cached.state ?? null);
           setLoadingLocal(false);
         }
         return;
@@ -127,6 +139,9 @@ export default function ProfileScreen() {
         setDisplayName(row.display_name ?? "");
         setPhotoUrl(row.photo_url ?? null);
         setLocationVis(row.location_visibility ?? "everyone");
+        setBio(row.bio ?? "");
+        setCity(row.city ?? null);
+        setState(row.state ?? null);
 
         // Ask provider to reload its cache (friends + nearby + profiles)
         await refresh(myUserId);
@@ -150,6 +165,7 @@ export default function ProfileScreen() {
 
     if (shouldForceEdit) {
       setEditing(true);
+      setActiveTab("settings");
     }
   }, [params.onboarding, profile]);
 
@@ -219,16 +235,15 @@ export default function ProfileScreen() {
   // -----------------------------
   // Editing state
   // -----------------------------
-  function startEditing() {
-    setEditing(true);
-  }
-
   function cancelEditing() {
     if (profile) {
       setUsername(profile.username ?? "");
       setDisplayName(profile.display_name ?? "");
       setPhotoUrl(profile.photo_url ?? null);
       setLocationVis(profile.location_visibility ?? "everyone");
+      setBio(profile.bio ?? "");
+      setCity(profile.city ?? null);
+      setState(profile.state ?? null);
     }
     setEditing(false);
   }
@@ -244,6 +259,7 @@ export default function ProfileScreen() {
       display_name: displayName.trim() || null,
       photo_url: photoUrl || null,
       location_visibility: locationVis || null,
+      bio: bio.trim() || null,
       onboarded: true,
     };
 
@@ -262,6 +278,9 @@ export default function ProfileScreen() {
 
     // Update local immediately
     setProfile(data);
+    setBio(data.bio ?? "");
+    setCity(data.city ?? null);
+    setState(data.state ?? null);
     setEditing(false);
 
     // Refresh provider cache so Map markers/cards use new photo/name immediately
@@ -286,53 +305,28 @@ export default function ProfileScreen() {
   }
 
   const loading = loadingLocal || mapDataLoading;
+  const hasLocation = Boolean(city || state);
+  const locationText = [city, state].filter(Boolean).join(", ");
 
-  // -----------------------------
-  // UI
-  // -----------------------------
-  if (loading) {
+  function renderTabButton(label: string, tab: ProfileTab) {
+    const selected = activeTab === tab;
     return (
-      <View style={s.center}>
-        <ActivityIndicator />
-        <Text style={{ marginTop: 8 }}>Loading profile…</Text>
-      </View>
+      <Pressable
+        key={tab}
+        onPress={() => setActiveTab(tab)}
+        style={[s.tabButton, selected && s.tabButtonActive]}
+      >
+        <Text style={[s.tabButtonText, selected && s.tabButtonTextActive]}>
+          {label}
+        </Text>
+      </Pressable>
     );
   }
 
-  if (!profile) {
+  function renderAboutSection() {
     return (
-      <View style={s.center}>
-        <Text>Profile not found.</Text>
-        {error ? <Text style={s.error}>{error}</Text> : null}
-      </View>
-    );
-  }
-
-  return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={{ flex: 1 }}
-    >
-      <ScrollView contentContainerStyle={s.container}>
-        {/* Avatar */}
-        <Pressable
-          onPress={editing ? pickImage : undefined}
-          style={({ pressed }) => [
-            s.avatarWrap,
-            pressed && editing ? { opacity: 0.8 } : null,
-          ]}
-        >
-          {photoUrl ? (
-            <Image source={{ uri: photoUrl }} style={s.avatar} />
-          ) : (
-            <View style={[s.avatar, s.avatarFallback]}>
-              <Text style={s.avatarInitials}>{initials || "?"}</Text>
-            </View>
-          )}
-          {editing && <Text style={s.changePhoto}>Change photo</Text>}
-        </Pressable>
-
-        {/* Email */}
+      <View style={s.sectionCard}>
+        <Text style={s.sectionTitle}>About</Text>
         <View style={s.field}>
           <Text style={s.label}>Email</Text>
           <View style={s.readonlyBox}>
@@ -340,6 +334,36 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        <View style={s.field}>
+          <Text style={s.label}>Bio</Text>
+          <View style={s.readonlyBox}>
+            <Text style={s.readonlyText}>{bio.trim() || "No bio yet."}</Text>
+          </View>
+        </View>
+
+        <View style={s.field}>
+          <Text style={s.label}>Location visibility</Text>
+          <View style={s.readonlyBox}>
+            <Text style={s.readonlyText}>{locationVis || "everyone"}</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  function renderPlaceholderSection(title: string, text: string) {
+    return (
+      <View style={s.sectionCard}>
+        <Text style={s.sectionTitle}>{title}</Text>
+        <Text style={s.placeholderText}>{text}</Text>
+      </View>
+    );
+  }
+
+  function renderSettingsSection() {
+    return (
+      <View style={s.sectionCard}>
+        <Text style={s.sectionTitle}>Settings</Text>
         {/* Username */}
         <View style={s.field}>
           <Text style={s.label}>Username</Text>
@@ -361,6 +385,19 @@ export default function ProfileScreen() {
             placeholder="Your name"
             editable={editing}
             style={[s.input, !editing && s.inputDisabled]}
+          />
+        </View>
+
+        {/* Bio */}
+        <View style={s.field}>
+          <Text style={s.label}>Bio</Text>
+          <TextInput
+            value={bio}
+            onChangeText={setBio}
+            placeholder="Tell people about yourself"
+            editable={editing}
+            multiline
+            style={[s.input, s.textarea, !editing && s.inputDisabled]}
           />
         </View>
 
@@ -402,26 +439,14 @@ export default function ProfileScreen() {
 
         {error ? <Text style={s.error}>{error}</Text> : null}
 
-        {/* Buttons */}
         <View style={s.btnRow}>
           {!editing ? (
-            <>
-              <Pressable onPress={startEditing} style={s.primaryBtn}>
-                <Text style={s.primaryBtnText}>Edit Profile</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={handleSignOut}
-                disabled={signingOut}
-                style={[s.secondaryBtn, signingOut && { opacity: 0.7 }]}
-              >
-                {signingOut ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Text style={s.secondaryBtnText}>Sign Out</Text>
-                )}
-              </Pressable>
-            </>
+            <Pressable
+              onPress={() => setEditing(true)}
+              style={s.primaryBtn}
+            >
+              <Text style={s.primaryBtnText}>Start Editing</Text>
+            </Pressable>
           ) : (
             <>
               <Pressable
@@ -442,6 +467,107 @@ export default function ProfileScreen() {
             </>
           )}
         </View>
+      </View>
+    );
+  }
+
+  // -----------------------------
+  // UI
+  // -----------------------------
+  if (loading) {
+    return (
+      <View style={s.center}>
+        <ActivityIndicator />
+        <Text style={{ marginTop: 8 }}>Loading profile…</Text>
+      </View>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <View style={s.center}>
+        <Text>Profile not found.</Text>
+        {error ? <Text style={s.error}>{error}</Text> : null}
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={{ flex: 1 }}
+    >
+      <ScrollView contentContainerStyle={s.container}>
+        {/* Profile Header */}
+        <Pressable
+          onPress={editing ? pickImage : undefined}
+          style={({ pressed }) => [
+            s.avatarWrap,
+            pressed && editing ? { opacity: 0.8 } : null,
+          ]}
+        >
+          {photoUrl ? (
+            <Image source={{ uri: photoUrl }} style={s.avatar} />
+          ) : (
+            <View style={[s.avatar, s.avatarFallback]}>
+              <Text style={s.avatarInitials}>{initials || "?"}</Text>
+            </View>
+          )}
+          {editing && <Text style={s.changePhoto}>Change photo</Text>}
+        </Pressable>
+
+        <View style={s.headerTextWrap}>
+          <Text style={s.displayNameText}>
+            {displayName.trim() || "No display name"}
+          </Text>
+          <Text style={s.usernameText}>@{username.trim() || "username"}</Text>
+          {bio.trim() ? <Text style={s.bioText}>{bio}</Text> : null}
+          {hasLocation ? <Text style={s.locationText}>{locationText}</Text> : null}
+        </View>
+
+        <View style={s.headerActions}>
+          <Pressable
+            onPress={() => {
+              setEditing(true);
+              setActiveTab("settings");
+            }}
+            style={s.primaryBtn}
+          >
+            <Text style={s.primaryBtnText}>Edit Profile</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={handleSignOut}
+            disabled={signingOut}
+            style={[s.secondaryBtn, signingOut && { opacity: 0.7 }]}
+          >
+            {signingOut ? (
+              <ActivityIndicator />
+            ) : (
+              <Text style={s.secondaryBtnText}>Sign Out</Text>
+            )}
+          </Pressable>
+        </View>
+
+        <View style={s.tabRow}>
+          {renderTabButton("About", "about")}
+          {renderTabButton("Cars", "cars")}
+          {renderTabButton("Membership", "membership")}
+          {renderTabButton("Settings", "settings")}
+        </View>
+
+        {activeTab === "about" && renderAboutSection()}
+        {activeTab === "cars" &&
+          renderPlaceholderSection(
+            "Cars",
+            "Cars content is coming soon. This tab is ready for your next step."
+          )}
+        {activeTab === "membership" &&
+          renderPlaceholderSection(
+            "Membership",
+            "Membership details will be added here in a future update."
+          )}
+        {activeTab === "settings" && renderSettingsSection()}
       </ScrollView>
     </KeyboardAvoidingView>
   );
