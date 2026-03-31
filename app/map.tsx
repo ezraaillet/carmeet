@@ -229,6 +229,7 @@ export default function MapScreen() {
   const [sendingRequest, setSendingRequest] = useState(false);
 
   const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
+  const [focusedClusterKey, setFocusedClusterKey] = useState<string | null>(null);
   const animatedUserCoordsRef = useRef<Record<string, AnimatedRegion>>({});
   const markerRefs = useRef<Record<string, MarkerAnimated | null>>({});
   const lastAnimatedTargetsRef = useRef<
@@ -400,12 +401,6 @@ export default function MapScreen() {
                 });
               }
 
-              setRegion((r) => ({
-                ...r,
-                latitude: coords.latitude,
-                longitude: coords.longitude,
-              }));
-
               await upsertMyLocation(
                 coords.latitude,
                 coords.longitude,
@@ -565,6 +560,16 @@ export default function MapScreen() {
 
     return renderedMarkers;
   }, [all, profilesById, region.latitudeDelta]);
+
+  const handleRegionChangeComplete = useCallback(
+    (nextRegion: Region) => {
+      setRegion(nextRegion);
+      if (focusedClusterKey !== null) {
+        setFocusedClusterKey(null);
+      }
+    },
+    [focusedClusterKey]
+  );
 
   const meetMarkers = useMemo(() => {
     return meets
@@ -844,7 +849,7 @@ export default function MapScreen() {
         style={StyleSheet.absoluteFill}
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
-        onRegionChangeComplete={setRegion}
+        onRegionChangeComplete={handleRegionChangeComplete}
       >
         {meetMarkers.map((meet) => (
           <Marker
@@ -874,6 +879,7 @@ export default function MapScreen() {
                 onPress={() => {
                   closeProfileCard();
                   setSelectedMeetId(null);
+                  setFocusedClusterKey(item.key);
                   mapRef.current?.fitToCoordinates(
                     item.members.map((member) => ({
                       latitude: member.latitude,
