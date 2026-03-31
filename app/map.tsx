@@ -138,6 +138,10 @@ function distanceBetweenCoordsMeters(
 const MARKER_JITTER_THRESHOLD_METERS = 2;
 const MARKER_SNAP_THRESHOLD_METERS = 350;
 const MARKER_ANIMATION_DURATION_MS = 900;
+const OVERLAP_THRESHOLD_METERS = 1.5;
+const OVERLAP_SPREAD_RADIUS_METERS = 7;
+const CLUSTER_MIN_SIZE = 4;
+const CLUSTER_MAX_ZOOM_LATITUDE_DELTA = 0.012;
 
 type AnimatedUserMarkerProps = {
   userId: string;
@@ -435,6 +439,7 @@ export default function MapScreen() {
       20,
       Math.min(120, 40 * (region.latitudeDelta / 0.05))
     );
+    const shouldShowClusters = region.latitudeDelta > CLUSTER_MAX_ZOOM_LATITUDE_DELTA;
     const usersWithProfiles = Object.values(all).filter(
       (loc) => !!profilesById[loc.user_id]
     );
@@ -486,7 +491,7 @@ export default function MapScreen() {
     )[] = [];
 
     groups.forEach((group, groupIdx) => {
-      if (group.length > 3) {
+      if (shouldShowClusters && group.length >= CLUSTER_MIN_SIZE) {
         const centerLat =
           group.reduce((sum, loc) => sum + loc.lat, 0) / group.length;
         const centerLng =
@@ -510,34 +515,50 @@ export default function MapScreen() {
         return;
       }
 
-      if (group.length === 1) {
-        const [loc] = group;
-        renderedMarkers.push({
-          type: "user",
-          loc,
-          adjLat: loc.lat,
-          adjLng: loc.lng,
-        });
-        return;
-      }
+      const overlapVisited = new Set<string>();
+      const overlapGroups: LiveLoc[][] = [];
 
-      const radiusMeters = 14 + 4 * (group.length - 2);
+      group.forEach((loc) => {
+        if (overlapVisited.has(loc.user_id)) return;
 
-      group.forEach((loc, i) => {
-        const angle = (2 * Math.PI * i) / group.length;
+        const overlapMembers = group.filter(
+          (candidate) =>
+            !overlapVisited.has(candidate.user_id) &&
+            distanceInMeters(loc, candidate) <= OVERLAP_THRESHOLD_METERS
+        );
 
-        const latRad = (loc.lat * Math.PI) / 180;
-        const metersPerDegLat = 111_111;
-        const metersPerDegLng = 111_111 * Math.cos(latRad);
+        overlapMembers.forEach((member) => overlapVisited.add(member.user_id));
+        overlapGroups.push(overlapMembers);
+      });
 
-        const dx = radiusMeters * Math.cos(angle);
-        const dy = radiusMeters * Math.sin(angle);
+      overlapGroups.forEach((overlapGroup) => {
+        if (overlapGroup.length <= 1) {
+          const [loc] = overlapGroup;
+          if (!loc) return;
+          renderedMarkers.push({
+            type: "user",
+            loc,
+            adjLat: loc.lat,
+            adjLng: loc.lng,
+          });
+          return;
+        }
 
-        renderedMarkers.push({
-          type: "user",
-          loc,
-          adjLat: loc.lat + dy / metersPerDegLat,
-          adjLng: loc.lng + dx / metersPerDegLng,
+        overlapGroup.forEach((loc, i) => {
+          const angle = (2 * Math.PI * i) / overlapGroup.length;
+          const latRad = (loc.lat * Math.PI) / 180;
+          const metersPerDegLat = 111_111;
+          const metersPerDegLng = 111_111 * Math.cos(latRad);
+
+          const dx = OVERLAP_SPREAD_RADIUS_METERS * Math.cos(angle);
+          const dy = OVERLAP_SPREAD_RADIUS_METERS * Math.sin(angle);
+
+          renderedMarkers.push({
+            type: "user",
+            loc,
+            adjLat: loc.lat + dy / metersPerDegLat,
+            adjLng: loc.lng + dx / metersPerDegLng,
+          });
         });
       });
     });
