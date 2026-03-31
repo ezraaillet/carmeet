@@ -49,6 +49,13 @@ type CarRow = {
   is_primary: boolean | null;
 };
 
+type MembershipRow = {
+  id: string;
+  user_id: string;
+  plan: "free" | "premium";
+  status: "active" | "inactive" | "cancelled" | "past_due" | "trialing";
+};
+
 export default function ProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ onboarding?: string }>();
@@ -87,6 +94,9 @@ export default function ProfileScreen() {
   const [carIsPrimary, setCarIsPrimary] = useState(false);
   const [editingCarId, setEditingCarId] = useState<string | null>(null);
   const [deletingCarId, setDeletingCarId] = useState<string | null>(null);
+  const [membership, setMembership] = useState<MembershipRow | null>(null);
+  const [membershipLoading, setMembershipLoading] = useState(false);
+  const [membershipError, setMembershipError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
   const [loadingLocal, setLoadingLocal] = useState(true);
@@ -235,6 +245,37 @@ export default function ProfileScreen() {
     if (activeTab !== "cars") return;
     void loadCars();
   }, [activeTab, loadCars]);
+
+  const loadMembership = useCallback(async () => {
+    if (!myUserId) {
+      setMembership(null);
+      return;
+    }
+
+    setMembershipLoading(true);
+    setMembershipError(null);
+
+    const { data, error: loadErr } = await supabase
+      .from("user_memberships")
+      .select("id, user_id, plan, status")
+      .eq("user_id", myUserId)
+      .maybeSingle();
+
+    if (loadErr) {
+      setMembership(null);
+      setMembershipError(loadErr.message);
+      setMembershipLoading(false);
+      return;
+    }
+
+    setMembership((data ?? null) as MembershipRow | null);
+    setMembershipLoading(false);
+  }, [myUserId]);
+
+  useEffect(() => {
+    if (activeTab !== "membership") return;
+    void loadMembership();
+  }, [activeTab, loadMembership]);
 
   // -----------------------------
   // Pick + upload avatar
@@ -571,6 +612,9 @@ export default function ProfileScreen() {
   const loading = !profile && (loadingLocal || mapDataLoading);
   const hasLocation = Boolean(city || state);
   const locationText = [city, state].filter(Boolean).join(", ");
+  const membershipPlan = membership?.plan ?? "free";
+  const membershipStatus = membership?.status ?? "inactive";
+  const isPremium = membershipPlan === "premium";
 
   function renderTabButton(label: string, tab: ProfileTab) {
     const selected = activeTab === tab;
@@ -615,11 +659,45 @@ export default function ProfileScreen() {
     );
   }
 
-  function renderPlaceholderSection(title: string, text: string) {
+  function renderMembershipSection() {
     return (
       <View style={s.sectionCard}>
-        <Text style={s.sectionTitle}>{title}</Text>
-        <Text style={s.placeholderText}>{text}</Text>
+        <Text style={s.sectionTitle}>Membership</Text>
+
+        {membershipError ? <Text style={s.error}>{membershipError}</Text> : null}
+
+        {membershipLoading ? (
+          <View style={s.carsLoadingWrap}>
+            <ActivityIndicator />
+            <Text style={s.placeholderText}>Loading membership…</Text>
+          </View>
+        ) : (
+          <>
+            <View style={s.field}>
+              <Text style={s.label}>Current plan</Text>
+              <View style={s.readonlyBox}>
+                <Text style={s.readonlyText}>{membershipPlan}</Text>
+              </View>
+            </View>
+
+            <View style={s.field}>
+              <Text style={s.label}>Status</Text>
+              <View style={s.readonlyBox}>
+                <Text style={s.readonlyText}>{membershipStatus}</Text>
+              </View>
+            </View>
+
+            {!isPremium ? (
+              <Pressable style={s.primaryBtn}>
+                <Text style={s.primaryBtnText}>Upgrade to Premium</Text>
+              </Pressable>
+            ) : (
+              <Text style={s.placeholderText}>
+                You are on Premium. More membership perks are coming soon.
+              </Text>
+            )}
+          </>
+        )}
       </View>
     );
   }
@@ -1044,11 +1122,7 @@ export default function ProfileScreen() {
 
         {activeTab === "about" && renderAboutSection()}
         {activeTab === "cars" && renderCarsSection()}
-        {activeTab === "membership" &&
-          renderPlaceholderSection(
-            "Membership",
-            "Membership details will be added here in a future update."
-          )}
+        {activeTab === "membership" && renderMembershipSection()}
         {activeTab === "settings" && renderSettingsSection()}
       </ScrollView>
     </KeyboardAvoidingView>
