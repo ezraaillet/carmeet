@@ -80,7 +80,8 @@ export default function ProfileScreen() {
   const [carMake, setCarMake] = useState("");
   const [carModel, setCarModel] = useState("");
   const [carColor, setCarColor] = useState("");
-  const [carPhotoUrl, setCarPhotoUrl] = useState("");
+  const [carPhotoUrl, setCarPhotoUrl] = useState<string | null>(null);
+  const [carPhotoUploading, setCarPhotoUploading] = useState(false);
   const [carIsPrimary, setCarIsPrimary] = useState(false);
 
   const [editing, setEditing] = useState(false);
@@ -265,10 +266,18 @@ export default function ProfileScreen() {
   ): Promise<string> {
     if (!myUserId) throw new Error("No user id");
 
+    return uploadImageToStorage(asset, "avatars", `${myUserId}`);
+  }
+
+  async function uploadImageToStorage(
+    asset: ImagePicker.ImagePickerAsset,
+    bucket: string,
+    pathPrefix: string
+  ): Promise<string> {
     const ext =
       asset.fileName?.split(".").pop() || asset.uri.split(".").pop() || "jpg";
 
-    const path = `${myUserId}/${Date.now()}.${ext}`;
+    const path = `${pathPrefix}/${Date.now()}.${ext}`;
 
     const contentType =
       asset.mimeType ||
@@ -282,7 +291,7 @@ export default function ProfileScreen() {
     const arrayBuffer = await response.arrayBuffer();
 
     const { error: upErr } = await supabase.storage
-      .from("avatars")
+      .from(bucket)
       .upload(path, arrayBuffer, {
         contentType,
         upsert: true,
@@ -290,8 +299,40 @@ export default function ProfileScreen() {
 
     if (upErr) throw upErr;
 
-    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
+  }
+
+  async function pickCarImage() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (perm.status !== "granted") {
+      Alert.alert("Permission needed", "We need access to your photos.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "images",
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.9,
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+
+    try {
+      if (!myUserId) throw new Error("No user id");
+      setCarPhotoUploading(true);
+      const uploadedUrl = await uploadImageToStorage(
+        result.assets[0],
+        "avatars",
+        `${myUserId}/cars`
+      );
+      setCarPhotoUrl(uploadedUrl);
+    } catch (e: any) {
+      Alert.alert("Upload failed", e?.message ?? "Unknown error");
+    } finally {
+      setCarPhotoUploading(false);
+    }
   }
 
   // -----------------------------
@@ -371,7 +412,8 @@ export default function ProfileScreen() {
     setCarMake("");
     setCarModel("");
     setCarColor("");
-    setCarPhotoUrl("");
+    setCarPhotoUrl(null);
+    setCarPhotoUploading(false);
     setCarIsPrimary(false);
   }
 
@@ -396,7 +438,7 @@ export default function ProfileScreen() {
       make: carMake.trim(),
       model: carModel.trim(),
       color: carColor.trim() || null,
-      photo_url: carPhotoUrl.trim() || null,
+      photo_url: carPhotoUrl,
       is_primary: carIsPrimary,
     };
 
@@ -551,14 +593,23 @@ export default function ProfileScreen() {
             </View>
 
             <View style={s.field}>
-              <Text style={s.label}>Photo URL</Text>
-              <TextInput
-                value={carPhotoUrl}
-                onChangeText={setCarPhotoUrl}
-                placeholder="https://..."
-                autoCapitalize="none"
-                style={s.input}
-              />
+              <Text style={s.label}>Car Photo</Text>
+              {carPhotoUrl ? (
+                <Image source={{ uri: carPhotoUrl }} style={s.addCarPhotoPreview} />
+              ) : null}
+              <Pressable
+                onPress={pickCarImage}
+                disabled={carPhotoUploading}
+                style={[s.secondaryBtn, carPhotoUploading && { opacity: 0.7 }]}
+              >
+                {carPhotoUploading ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={s.secondaryBtnText}>
+                    {carPhotoUrl ? "Change Photo" : "Choose Photo"}
+                  </Text>
+                )}
+              </Pressable>
             </View>
 
             <Pressable

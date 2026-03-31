@@ -253,6 +253,14 @@ const profileStyles = StyleSheet.create({
     backgroundColor: colors.charcoal,
   },
 
+  addCarPhotoPreview: {
+    width: "100%",
+    height: 170,
+    borderRadius: 8,
+    marginBottom: 10,
+    backgroundColor: colors.charcoal,
+  },
+
   carTitle: {
     color: colors.offwhite,
     fontSize: 16,
