@@ -79,10 +79,14 @@ export default function ProfileScreen() {
   const [carYear, setCarYear] = useState("");
   const [carMake, setCarMake] = useState("");
   const [carModel, setCarModel] = useState("");
+  const [carTrim, setCarTrim] = useState("");
   const [carColor, setCarColor] = useState("");
+  const [carDescription, setCarDescription] = useState("");
   const [carPhotoUrl, setCarPhotoUrl] = useState<string | null>(null);
   const [carPhotoUploading, setCarPhotoUploading] = useState(false);
   const [carIsPrimary, setCarIsPrimary] = useState(false);
+  const [editingCarId, setEditingCarId] = useState<string | null>(null);
+  const [deletingCarId, setDeletingCarId] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
   const [loadingLocal, setLoadingLocal] = useState(true);
@@ -303,6 +307,28 @@ export default function ProfileScreen() {
     return data.publicUrl;
   }
 
+  async function uploadImageToStoragePath(
+    asset: ImagePicker.ImagePickerAsset,
+    bucket: string,
+    path: string
+  ): Promise<string> {
+    const contentType = asset.mimeType || "image/jpeg";
+    const response = await fetch(asset.uri);
+    const arrayBuffer = await response.arrayBuffer();
+
+    const { error: upErr } = await supabase.storage
+      .from(bucket)
+      .upload(path, arrayBuffer, {
+        contentType,
+        upsert: true,
+      });
+
+    if (upErr) throw upErr;
+
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    return data.publicUrl;
+  }
+
   async function pickCarImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (perm.status !== "granted") {
@@ -322,11 +348,13 @@ export default function ProfileScreen() {
     try {
       if (!myUserId) throw new Error("No user id");
       setCarPhotoUploading(true);
-      const uploadedUrl = await uploadImageToStorage(
-        result.assets[0],
-        "avatars",
-        `${myUserId}/cars`
-      );
+      const uploadedUrl = editingCarId
+        ? await uploadImageToStoragePath(
+            result.assets[0],
+            "avatars",
+            `${myUserId}/cars/${editingCarId}.jpg`
+          )
+        : await uploadImageToStorage(result.assets[0], "avatars", `${myUserId}/cars`);
       setCarPhotoUrl(uploadedUrl);
     } catch (e: any) {
       Alert.alert("Upload failed", e?.message ?? "Unknown error");
@@ -411,10 +439,26 @@ export default function ProfileScreen() {
     setCarYear("");
     setCarMake("");
     setCarModel("");
+    setCarTrim("");
     setCarColor("");
+    setCarDescription("");
     setCarPhotoUrl(null);
     setCarPhotoUploading(false);
     setCarIsPrimary(false);
+    setEditingCarId(null);
+  }
+
+  function beginEditCar(car: CarRow) {
+    setShowAddCar(true);
+    setEditingCarId(car.id);
+    setCarYear(car.year ? String(car.year) : "");
+    setCarMake(car.make ?? "");
+    setCarModel(car.model ?? "");
+    setCarTrim(car.trim ?? "");
+    setCarColor(car.color ?? "");
+    setCarDescription(car.description ?? "");
+    setCarPhotoUrl(car.photo_url ?? null);
+    setCarIsPrimary(Boolean(car.is_primary));
   }
 
   async function saveCar() {
@@ -433,42 +477,95 @@ export default function ProfileScreen() {
     setCarsError(null);
 
     const insertPayload = {
-      user_id: myUserId,
       year: parsedYear,
       make: carMake.trim(),
       model: carModel.trim(),
+      trim: carTrim.trim() || null,
       color: carColor.trim() || null,
+      description: carDescription.trim() || null,
       photo_url: carPhotoUrl,
       is_primary: carIsPrimary,
     };
 
-    const { data: inserted, error: insertErr } = await supabase
-      .from("cars")
-      .insert(insertPayload)
-      .select(
-        "id, user_id, make, model, year, trim, color, description, photo_url, is_primary"
-      )
-      .single<CarRow>();
-
-    if (insertErr || !inserted) {
-      setCarsError(insertErr?.message ?? "Could not save car.");
-      setAddingCar(false);
-      return;
-    }
-
-    if (inserted.is_primary) {
-      await supabase
+    if (editingCarId) {
+      const { error: updateErr } = await supabase
         .from("cars")
-        .update({ is_primary: false })
-        .eq("user_id", myUserId)
-        .neq("id", inserted.id)
-        .eq("is_primary", true);
+        .update(insertPayload)
+        .eq("id", editingCarId)
+        .eq("user_id", myUserId);
+
+      if (updateErr) {
+        setCarsError(updateErr.message || "Could not update car.");
+        setAddingCar(false);
+        return;
+      }
+
+      if (carIsPrimary) {
+        await supabase
+          .from("cars")
+          .update({ is_primary: false })
+          .eq("user_id", myUserId)
+          .neq("id", editingCarId)
+          .eq("is_primary", true);
+      }
+    } else {
+      const { data: inserted, error: insertErr } = await supabase
+        .from("cars")
+        .insert({ ...insertPayload, user_id: myUserId })
+        .select(
+          "id, user_id, make, model, year, trim, color, description, photo_url, is_primary"
+        )
+        .single<CarRow>();
+
+      if (insertErr || !inserted) {
+        setCarsError(insertErr?.message ?? "Could not save car.");
+        setAddingCar(false);
+        return;
+      }
+
+      if (inserted.is_primary) {
+        await supabase
+          .from("cars")
+          .update({ is_primary: false })
+          .eq("user_id", myUserId)
+          .neq("id", inserted.id)
+          .eq("is_primary", true);
+      }
     }
 
     setShowAddCar(false);
     resetAddCarForm();
     await loadCars();
     setAddingCar(false);
+  }
+
+  async function deleteCar(car: CarRow) {
+    if (!myUserId) return;
+
+    setDeletingCarId(car.id);
+    setCarsError(null);
+
+    const { error: deleteErr } = await supabase
+      .from("cars")
+      .delete()
+      .eq("id", car.id)
+      .eq("user_id", myUserId);
+
+    if (!deleteErr) {
+      await supabase.storage
+        .from("avatars")
+        .remove([`${myUserId}/cars/${car.id}.jpg`]);
+    } else {
+      setCarsError(deleteErr.message || "Could not delete car.");
+    }
+
+    if (editingCarId === car.id) {
+      setShowAddCar(false);
+      resetAddCarForm();
+    }
+
+    await loadCars();
+    setDeletingCarId(null);
   }
 
   const loading = !profile && (loadingLocal || mapDataLoading);
@@ -583,12 +680,33 @@ export default function ProfileScreen() {
             </View>
 
             <View style={s.field}>
+              <Text style={s.label}>Trim</Text>
+              <TextInput
+                value={carTrim}
+                onChangeText={setCarTrim}
+                placeholder="Sport"
+                style={s.input}
+              />
+            </View>
+
+            <View style={s.field}>
               <Text style={s.label}>Color</Text>
               <TextInput
                 value={carColor}
                 onChangeText={setCarColor}
                 placeholder="Blue"
                 style={s.input}
+              />
+            </View>
+
+            <View style={s.field}>
+              <Text style={s.label}>Description</Text>
+              <TextInput
+                value={carDescription}
+                onChangeText={setCarDescription}
+                placeholder="Notes about the build"
+                multiline
+                style={[s.input, s.textarea]}
               />
             </View>
 
@@ -639,7 +757,9 @@ export default function ProfileScreen() {
               {addingCar ? (
                 <ActivityIndicator />
               ) : (
-                <Text style={s.primaryBtnText}>Save Car</Text>
+                <Text style={s.primaryBtnText}>
+                  {editingCarId ? "Update Car" : "Save Car"}
+                </Text>
               )}
             </Pressable>
           </View>
@@ -672,9 +792,53 @@ export default function ProfileScreen() {
               {car.color ? (
                 <Text style={s.carMeta}>Color: {car.color}</Text>
               ) : null}
+              {car.trim ? (
+                <Text style={s.carMeta}>Trim: {car.trim}</Text>
+              ) : null}
+              {car.description ? (
+                <Text style={s.carMeta}>Description: {car.description}</Text>
+              ) : null}
               <Text style={s.carMeta}>
                 {car.is_primary ? "Primary car" : "Secondary car"}
               </Text>
+              <View style={s.carActionsRow}>
+                <Pressable
+                  onPress={() => beginEditCar(car)}
+                  style={[s.secondaryBtn, s.carActionBtn]}
+                >
+                  <Text style={s.secondaryBtnText}>Edit</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() =>
+                    Alert.alert(
+                      "Delete car?",
+                      "This action cannot be undone.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Delete",
+                          style: "destructive",
+                          onPress: () => {
+                            void deleteCar(car);
+                          },
+                        },
+                      ]
+                    )
+                  }
+                  disabled={deletingCarId === car.id}
+                  style={[
+                    s.secondaryBtn,
+                    s.carActionBtn,
+                    deletingCarId === car.id && { opacity: 0.7 },
+                  ]}
+                >
+                  {deletingCarId === car.id ? (
+                    <ActivityIndicator />
+                  ) : (
+                    <Text style={s.secondaryBtnText}>Delete</Text>
+                  )}
+                </Pressable>
+              </View>
             </View>
           ))
         )}

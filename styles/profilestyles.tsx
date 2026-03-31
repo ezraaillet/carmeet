@@ -272,6 +272,17 @@ const profileStyles = StyleSheet.create({
     color: colors.silver,
   },
 
+  carActionsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+
+  carActionBtn: {
+    flex: 1,
+    alignItems: "center",
+  },
+
   primaryBtn: {
     backgroundColor: colors.primary,
     paddingVertical: 12,
