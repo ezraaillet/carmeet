@@ -427,7 +427,10 @@ export default function MapScreen() {
     ])
   );
 
-  const all = locationsById;
+  const sourceLocations = useMemo(
+    () => Object.values(locationsById),
+    [locationsById]
+  );
 
   const mapMarkers = useMemo(() => {
     const nearbyThresholdMeters = Math.max(
@@ -435,14 +438,14 @@ export default function MapScreen() {
       Math.min(120, 40 * (region.latitudeDelta / 0.05))
     );
     const shouldShowClusters = region.latitudeDelta > CLUSTER_MAX_ZOOM_LATITUDE_DELTA;
-    const usersWithProfiles = Object.values(all).filter(
-      (loc) => !!profilesById[loc.user_id]
-    );
+    // Always derive marker output from the full live-location dataset.
+    // Profile availability only changes marker presentation, never inclusion.
+    const baseLocations = sourceLocations;
 
     const visited = new Set<string>();
     const groups: LiveLoc[][] = [];
 
-    for (const loc of usersWithProfiles) {
+    for (const loc of baseLocations) {
       if (visited.has(loc.user_id)) continue;
 
       const queue: LiveLoc[] = [loc];
@@ -455,7 +458,7 @@ export default function MapScreen() {
 
         group.push(current);
 
-        usersWithProfiles.forEach((candidate) => {
+        baseLocations.forEach((candidate) => {
           if (visited.has(candidate.user_id)) return;
 
           if (distanceInMeters(current, candidate) <= nearbyThresholdMeters) {
@@ -559,7 +562,7 @@ export default function MapScreen() {
     });
 
     return renderedMarkers;
-  }, [all, profilesById, region.latitudeDelta]);
+  }, [region.latitudeDelta, sourceLocations]);
 
   const handleRegionChangeComplete = useCallback(
     (nextRegion: Region) => {
