@@ -432,12 +432,30 @@ export default function MapScreen() {
     [locationsById]
   );
 
+  const shouldShowClusters =
+    region.latitudeDelta > CLUSTER_MAX_ZOOM_LATITUDE_DELTA;
+  const previousClusterModeRef = useRef<boolean>(shouldShowClusters);
+  const [clusterModeVersion, setClusterModeVersion] = useState(0);
+
+  const debugTrackedDistantUserIds = useMemo(() => {
+    return sourceLocations
+      .map((loc) => ({
+        userId: loc.user_id,
+        distanceFromCenter: distanceBetweenCoordsMeters(
+          { latitude: region.latitude, longitude: region.longitude },
+          { latitude: loc.lat, longitude: loc.lng }
+        ),
+      }))
+      .sort((a, b) => b.distanceFromCenter - a.distanceFromCenter)
+      .slice(0, 2)
+      .map((item) => item.userId);
+  }, [region.latitude, region.longitude, sourceLocations]);
+
   const mapMarkers = useMemo(() => {
     const nearbyThresholdMeters = Math.max(
       20,
       Math.min(120, 40 * (region.latitudeDelta / 0.05))
     );
-    const shouldShowClusters = region.latitudeDelta > CLUSTER_MAX_ZOOM_LATITUDE_DELTA;
     // Always derive marker output from the full live-location dataset.
     // Profile availability only changes marker presentation, never inclusion.
     const baseLocations = sourceLocations;
@@ -562,7 +580,68 @@ export default function MapScreen() {
     });
 
     return renderedMarkers;
-  }, [region.latitudeDelta, sourceLocations]);
+  }, [region.latitudeDelta, shouldShowClusters, sourceLocations]);
+
+
+  useEffect(() => {
+    const previousMode = previousClusterModeRef.current;
+    if (previousMode !== shouldShowClusters) {
+      previousClusterModeRef.current = shouldShowClusters;
+      setClusterModeVersion((v) => v + 1);
+      console.log("[Map][ClusterThreshold] mode-cross", {
+        previousMode,
+        nextMode: shouldShowClusters,
+        latitudeDelta: region.latitudeDelta,
+        threshold: CLUSTER_MAX_ZOOM_LATITUDE_DELTA,
+      });
+    }
+  }, [region.latitudeDelta, shouldShowClusters]);
+
+  useEffect(() => {
+    const renderedUserIds = mapMarkers
+      .filter((item): item is { type: "user"; loc: LiveLoc; adjLat: number; adjLng: number } => item.type === "user")
+      .map((item) => item.loc.user_id);
+
+    const renderedClusterMemberIds = mapMarkers
+      .filter((item): item is {
+        type: "cluster";
+        key: string;
+        lat: number;
+        lng: number;
+        count: number;
+        members: { userId: string; latitude: number; longitude: number }[];
+      } => item.type === "cluster")
+      .flatMap((item) => item.members.map((member) => member.userId));
+
+    const allRenderedIds = new Set([
+      ...renderedUserIds,
+      ...renderedClusterMemberIds,
+    ]);
+
+    console.log("[Map][ClusterThreshold] render-snapshot", {
+      shouldShowClusters,
+      latitudeDelta: region.latitudeDelta,
+      threshold: CLUSTER_MAX_ZOOM_LATITUDE_DELTA,
+      sourceCount: sourceLocations.length,
+      renderedMarkerCount: mapMarkers.length,
+      renderedUserMarkerCount: renderedUserIds.length,
+      renderedClusterCount: mapMarkers.length - renderedUserIds.length,
+      debugTrackedDistantUserIds,
+      debugTrackedPresence: debugTrackedDistantUserIds.map((id) => ({
+        userId: id,
+        inSource: sourceLocations.some((loc) => loc.user_id === id),
+        renderedAsUser: renderedUserIds.includes(id),
+        renderedInClusterMembers: renderedClusterMemberIds.includes(id),
+        renderedAnywhere: allRenderedIds.has(id),
+      })),
+    });
+  }, [
+    debugTrackedDistantUserIds,
+    mapMarkers,
+    region.latitudeDelta,
+    shouldShowClusters,
+    sourceLocations,
+  ]);
 
   const handleRegionChangeComplete = useCallback(
     (nextRegion: Region) => {
@@ -873,7 +952,7 @@ export default function MapScreen() {
           if (item.type === "cluster") {
             return (
               <Marker
-                key={item.key}
+                key={`cluster-mode-${clusterModeVersion}-${item.key}`}
                 coordinate={{ latitude: item.lat, longitude: item.lng }}
                 anchor={{ x: 0.5, y: 0.5 }}
                 title="Nearby group"
@@ -932,7 +1011,7 @@ export default function MapScreen() {
 
           return (
             <AnimatedUserMarker
-              key={loc.user_id}
+              key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
               userId={loc.user_id}
               coordinate={animatedCoordinate}
               title={markerName}
