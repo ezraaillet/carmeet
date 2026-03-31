@@ -431,7 +431,10 @@ export default function MapScreen() {
   const all = locationsById;
 
   const mapMarkers = useMemo(() => {
-    const nearbyThresholdMeters = 40;
+    const nearbyThresholdMeters = Math.max(
+      20,
+      Math.min(120, 40 * (region.latitudeDelta / 0.05))
+    );
     const usersWithProfiles = Object.values(all).filter(
       (loc) => !!profilesById[loc.user_id]
     );
@@ -478,6 +481,7 @@ export default function MapScreen() {
           lat: number;
           lng: number;
           count: number;
+          members: { userId: string; latitude: number; longitude: number }[];
         }
     )[] = [];
 
@@ -490,10 +494,18 @@ export default function MapScreen() {
 
         renderedMarkers.push({
           type: "cluster",
-          key: `cluster-${groupIdx}`,
+          key: `cluster-${group
+            .map((loc) => loc.user_id)
+            .sort()
+            .join("-")}-${groupIdx}`,
           lat: centerLat,
           lng: centerLng,
           count: group.length,
+          members: group.map((loc) => ({
+            userId: loc.user_id,
+            latitude: loc.lat,
+            longitude: loc.lng,
+          })),
         });
         return;
       }
@@ -531,7 +543,7 @@ export default function MapScreen() {
     });
 
     return renderedMarkers;
-  }, [all, profilesById]);
+  }, [all, profilesById, region.latitudeDelta]);
 
   const meetMarkers = useMemo(() => {
     return meets
@@ -811,6 +823,7 @@ export default function MapScreen() {
         style={StyleSheet.absoluteFill}
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
+        onRegionChangeComplete={setRegion}
       >
         {meetMarkers.map((meet) => (
           <Marker
@@ -840,10 +853,25 @@ export default function MapScreen() {
                 onPress={() => {
                   closeProfileCard();
                   setSelectedMeetId(null);
+                  mapRef.current?.fitToCoordinates(
+                    item.members.map((member) => ({
+                      latitude: member.latitude,
+                      longitude: member.longitude,
+                    })),
+                    {
+                      edgePadding: {
+                        top: 110,
+                        right: 110,
+                        bottom: 110,
+                        left: 110,
+                      },
+                      animated: true,
+                    }
+                  );
                 }}
               >
                 <View style={styles.clusterBubble}>
-                  <Text style={styles.clusterBubbleText}>3+</Text>
+                  <Text style={styles.clusterBubbleText}>{item.count}</Text>
                 </View>
               </Marker>
             );
