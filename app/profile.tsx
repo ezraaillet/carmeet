@@ -19,7 +19,11 @@ import { supabase } from "../database/supabase";
 import { useMapData } from "@/components/MapDataProvider";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
+import {
+  ensureMembershipExistsForProfile,
+  ensureMinimalProfileExists,
+  hasMapProfileData,
+} from "@/utils/profileReadiness";
 
 type ProfileRow = {
   id: string;
@@ -255,21 +259,15 @@ export default function ProfileScreen() {
     setMembershipLoading(true);
     setMembershipError(null);
 
-    const { data, error: loadErr } = await supabase
-      .from("user_memberships")
-      .select("id, user_id, plan, status")
-      .eq("user_id", myUserId)
-      .maybeSingle();
-
-    if (loadErr) {
-      setMembership(null);
-      setMembershipError(loadErr.message);
+    try {
+      const data = await ensureMembershipExistsForProfile(myUserId);
+      setMembership((data ?? null) as MembershipRow | null);
       setMembershipLoading(false);
-      return;
+    } catch (loadErr: any) {
+      setMembership(null);
+      setMembershipError(loadErr?.message ?? "Failed to load membership.");
+      setMembershipLoading(false);
     }
-
-    setMembership((data ?? null) as MembershipRow | null);
-    setMembershipLoading(false);
   }, [myUserId]);
 
   useEffect(() => {
@@ -613,7 +611,7 @@ export default function ProfileScreen() {
   const hasLocation = Boolean(city || state);
   const locationText = [city, state].filter(Boolean).join(", ");
   const membershipPlan = membership?.plan ?? "free";
-  const membershipStatus = membership?.status ?? "inactive";
+  const membershipStatus = membership?.status ?? "active";
   const isPremium = membershipPlan === "premium";
 
   function renderTabButton(label: string, tab: ProfileTab) {

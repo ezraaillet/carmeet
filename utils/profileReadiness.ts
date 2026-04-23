@@ -6,6 +6,13 @@ export type MapProfileFields = {
   photo_url?: string | null;
 };
 
+export type UserMembershipFields = {
+  id: string;
+  user_id: string;
+  plan: "free" | "premium";
+  status: "active" | "inactive" | "cancelled" | "past_due" | "trialing";
+};
+
 export function hasMapProfileData(profile: MapProfileFields | null | undefined) {
   if (!profile) return false;
 
@@ -72,4 +79,59 @@ export async function ensureMinimalProfileExists(
   }
 
   return ensured;
+}
+
+export async function ensureMembershipExistsForProfile(uid: string) {
+  const { supabase } = await import("@/database/supabase");
+
+  const { data, error: selectError } = await supabase
+    .from("user_memberships")
+    .select("id, user_id, plan, status")
+    .eq("user_id", uid)
+    .maybeSingle<UserMembershipFields>();
+
+  if (selectError) {
+    throw selectError;
+  }
+
+  if (data) {
+    return data;
+  }
+
+  const { error: insertError } = await supabase
+    .from("user_memberships")
+    .upsert(
+      {
+        user_id: uid,
+        plan: "free",
+        status: "active",
+      },
+      { onConflict: "user_id", ignoreDuplicates: true }
+    );
+
+  if (insertError) {
+    throw insertError;
+  }
+
+  const { data: ensured, error: ensuredError } = await supabase
+    .from("user_memberships")
+    .select("id, user_id, plan, status")
+    .eq("user_id", uid)
+    .maybeSingle<UserMembershipFields>();
+
+  if (ensuredError) {
+    throw ensuredError;
+  }
+
+  return ensured ?? null;
+}
+
+export async function ensureProfileAndMembershipExists(
+  uid: string,
+  email?: string | null
+) {
+  const profile = await ensureMinimalProfileExists(uid, email);
+  const membership = await ensureMembershipExistsForProfile(uid);
+
+  return { profile, membership };
 }
