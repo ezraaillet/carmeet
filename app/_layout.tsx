@@ -8,7 +8,7 @@ import NotificationsOverlay from "../components/NotificationsOverlay";
 import { colors } from "../styles/themes";
 import styles from "../styles/homestyles";
 import { supabase } from "../database/supabase";
-import { ensureMinimalProfileExists } from "@/utils/profileReadiness";
+import { ensureProfileAndMembershipExists } from "@/utils/profileReadiness";
 
 export type FriendRequest = {
   id: string;
@@ -35,11 +35,11 @@ function RootLayoutInner() {
   const [notifError, setNotifError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const ensureProfileExists = useCallback(async (uid: string, email?: string | null) => {
+  const ensureProfileAndMembership = useCallback(async (uid: string, email?: string | null) => {
     try {
-      await ensureMinimalProfileExists(uid, email);
+      await ensureProfileAndMembershipExists(uid, email);
     } catch (error: any) {
-      console.warn("ensure profile exists error:", error?.message ?? error);
+      console.warn("ensure profile/membership exists error:", error?.message ?? error);
     }
   }, []);
 
@@ -54,7 +54,7 @@ function RootLayoutInner() {
       setUserId(user?.id ?? null);
 
       if (user?.id) {
-        await ensureProfileExists(user.id, user.email ?? null);
+        await ensureProfileAndMembership(user.id, user.email ?? null);
       }
 
       setCheckingAuth(false);
@@ -66,14 +66,14 @@ function RootLayoutInner() {
       setUserId(user?.id ?? null);
 
       if (user?.id) {
-        void ensureProfileExists(user.id, user.email ?? null);
+        void ensureProfileAndMembership(user.id, user.email ?? null);
       }
 
       setCheckingAuth(false);
     });
 
     return () => sub.subscription.unsubscribe();
-  }, [ensureProfileExists]);
+  }, [ensureProfileAndMembership]);
 
   // Fetch pending requests list + count
   const fetchPendingRequests = useCallback(async () => {
