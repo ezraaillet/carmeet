@@ -513,6 +513,13 @@ export default function ProfileScreen() {
 
   async function saveCar() {
     if (!myUserId) return;
+    if (!editingCarId && !isPremium && cars.length >= 1) {
+      Alert.alert(
+        "Premium feature",
+        "Free members can add 1 car. Upgrade to Premium to add multiple cars."
+      );
+      return;
+    }
 
     const parsedYear = Number.parseInt(carYear.trim(), 10);
     if (!carMake.trim() || !carModel.trim() || Number.isNaN(parsedYear)) {
@@ -624,6 +631,7 @@ export default function ProfileScreen() {
   const membershipPlan = membership?.plan ?? "free";
   const membershipStatus = membership?.status ?? "inactive";
   const isPremium = membershipPlan === "premium" && membershipStatus === "active";
+  const canAddAnotherCar = isPremium || cars.length === 0 || Boolean(editingCarId);
 
   function renderTabButton(label: string, tab: ProfileTab) {
     const selected = activeTab === tab;
@@ -721,6 +729,13 @@ export default function ProfileScreen() {
               if (showAddCar) {
                 setShowAddCar(false);
                 resetAddCarForm();
+                return;
+              }
+              if (!canAddAnotherCar) {
+                Alert.alert(
+                  "Premium feature",
+                  "Free members can add 1 car. Upgrade to Premium to add multiple cars."
+                );
                 return;
               }
               setShowAddCar(true);
