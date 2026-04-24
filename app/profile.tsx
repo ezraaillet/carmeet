@@ -20,7 +20,6 @@ import { useMapData } from "@/components/MapDataProvider";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import {
-  ensureMembershipExistsForProfile,
   ensureMinimalProfileExists,
   hasMapProfileData,
 } from "@/utils/profileReadiness";
@@ -260,8 +259,15 @@ export default function ProfileScreen() {
     setMembershipError(null);
 
     try {
-      const data = await ensureMembershipExistsForProfile(myUserId);
-      setMembership((data ?? null) as MembershipRow | null);
+      const { data, error: loadErr } = await supabase
+        .from("user_memberships")
+        .select("id, user_id, plan, status")
+        .eq("user_id", myUserId)
+        .maybeSingle<MembershipRow>();
+
+      if (loadErr) throw loadErr;
+
+      setMembership(data ?? null);
       setMembershipLoading(false);
     } catch (loadErr: any) {
       setMembership(null);
@@ -269,6 +275,11 @@ export default function ProfileScreen() {
       setMembershipLoading(false);
     }
   }, [myUserId]);
+
+  useEffect(() => {
+    if (!myUserId) return;
+    void loadMembership();
+  }, [myUserId, loadMembership]);
 
   useEffect(() => {
     if (activeTab !== "membership") return;
@@ -611,8 +622,8 @@ export default function ProfileScreen() {
   const hasLocation = Boolean(city || state);
   const locationText = [city, state].filter(Boolean).join(", ");
   const membershipPlan = membership?.plan ?? "free";
-  const membershipStatus = membership?.status ?? "active";
-  const isPremium = membershipPlan === "premium";
+  const membershipStatus = membership?.status ?? "inactive";
+  const isPremium = membershipPlan === "premium" && membershipStatus === "active";
 
   function renderTabButton(label: string, tab: ProfileTab) {
     const selected = activeTab === tab;
@@ -1079,9 +1090,16 @@ export default function ProfileScreen() {
         </Pressable>
 
         <View style={s.headerTextWrap}>
-          <Text style={s.displayNameText}>
-            {displayName.trim() || "No display name"}
-          </Text>
+          <View style={s.displayNameRow}>
+            <Text style={s.displayNameText}>
+              {displayName.trim() || "No display name"}
+            </Text>
+            {isPremium ? (
+              <View style={s.premiumBadge}>
+                <Text style={s.premiumBadgeText}>✓</Text>
+              </View>
+            ) : null}
+          </View>
           <Text style={s.usernameText}>@{username.trim() || "username"}</Text>
           {bio.trim() ? <Text style={s.bioText}>{bio}</Text> : null}
           {hasLocation ? <Text style={s.locationText}>{locationText}</Text> : null}
