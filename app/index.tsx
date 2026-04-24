@@ -23,6 +23,12 @@ import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileRe
 type HomeTab = "friends" | "meets";
 type AuthMode = "signin" | "signup" | null;
 type FriendProfile = NonNullable<ReturnType<typeof useFriendProfiles>[number]>;
+type MembershipRow = {
+  id: string;
+  user_id: string;
+  plan: "free" | "premium";
+  status: "active" | "inactive" | "cancelled" | "past_due" | "trialing";
+};
 
 function useFriendProfiles(
   authedEmail: string | null,
@@ -174,6 +180,7 @@ export default function Home() {
   const [updatingAttendanceMeetId, setUpdatingAttendanceMeetId] = useState<string | null>(null);
   const [meetSearchTitleInput, setMeetSearchTitleInput] = useState("");
   const [meetSearchDateInput, setMeetSearchDateInput] = useState<string | null>(null);
+  const [membership, setMembership] = useState<MembershipRow | null>(null);
 
   const meetDateOptions = useMemo(() => {
     const next14Days = Array.from({ length: 14 }, (_, idx) => {
@@ -273,6 +280,9 @@ export default function Home() {
   }, [meetCards, meetSearchDateInput, meetSearchTitleInput]);
 
   const hasMeetFilters = Boolean(meetSearchTitleInput.trim() || meetSearchDateInput);
+  const membershipPlan = membership?.plan ?? "free";
+  const membershipStatus = membership?.status ?? "inactive";
+  const isPremium = membershipPlan === "premium" && membershipStatus === "active";
 
   async function routeAfterAuth(uid: string) {
     await ensureMinimalProfileExists(uid, cleanEmail || null);
@@ -321,6 +331,36 @@ export default function Home() {
       setSelectedFriend(nextSelectedFriend);
     }
   }, [friendProfiles, selectedFriend]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (!myUserId) {
+        setMembership(null);
+        return;
+      }
+
+      const { data, error: membershipError } = await supabase
+        .from("user_memberships")
+        .select("id, user_id, plan, status")
+        .eq("user_id", myUserId)
+        .maybeSingle<MembershipRow>();
+
+      if (cancelled) return;
+
+      if (membershipError) {
+        setMembership(null);
+        return;
+      }
+
+      setMembership(data ?? null);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [myUserId]);
 
   async function handleSignIn() {
     setLoading(true);
@@ -445,6 +485,14 @@ export default function Home() {
   }
 
   function openCreateMeetModal() {
+    if (!isPremium) {
+      Alert.alert(
+        "Premium feature",
+        "Meet creation is a Premium feature. Upgrade your membership to create meets."
+      );
+      return;
+    }
+
     setMeetTitleInput("");
     setMeetLocationInput("");
     setMeetDescriptionInput("");
@@ -465,6 +513,13 @@ export default function Home() {
 
   async function handleCreateMeet() {
     if (!myUserId || creatingMeet) return;
+    if (!isPremium) {
+      Alert.alert(
+        "Premium feature",
+        "Meet creation is a Premium feature. Upgrade your membership to create meets."
+      );
+      return;
+    }
 
     const title = meetTitleInput.trim();
     const locationName = meetLocationInput.trim();
