@@ -60,6 +60,29 @@ const profileStyles = StyleSheet.create({
     fontSize: 24,
   },
 
+  displayNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  premiumBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+
+  premiumBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 12,
+  },
+
   usernameText: {
     marginTop: 3,
     color: colors.silver,
