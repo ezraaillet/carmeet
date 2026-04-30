@@ -939,13 +939,17 @@ export default function MapScreen() {
             coordinate={{ latitude: meet.latitude, longitude: meet.longitude }}
             title={meet.title || "Meet"}
             description={meet.location_name || "Car meet"}
-            pinColor="#f97316"
             zIndex={400}
             onPress={() => {
               closeProfileCard();
               setSelectedMeetId(meet.id);
             }}
-          />
+          >
+            <View style={styles.meetMarkerWrap}>
+              <Text style={styles.meetMarkerIcon}>🚗</Text>
+              <Text style={styles.meetMarkerLabel}>MEET</Text>
+            </View>
+          </Marker>
         ))}
 
         {mapMarkers.map((item) => {
