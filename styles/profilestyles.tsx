@@ -23,6 +23,9 @@ const profileStyles = StyleSheet.create({
     alignSelf: "center",
     alignItems: "center",
     marginBottom: 12,
+    borderWidth: 3,
+    borderRadius: 999,
+    padding: 4,
   },
 
   avatar: {
@@ -366,6 +369,33 @@ const profileStyles = StyleSheet.create({
   // Your original style
   text: {
     fontSize: 18,
+  },
+
+  accentPickerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+
+  accentSwatch: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#ffffff44",
+  },
+
+  accentSwatchSelected: {
+    borderColor: "#fff",
+    transform: [{ scale: 1.08 }],
+  },
+
+  accentSwatchCheck: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 12,
   },
 });
 

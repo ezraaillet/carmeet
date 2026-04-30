@@ -59,6 +59,23 @@ type MembershipRow = {
   status: "active" | "inactive" | "cancelled" | "past_due" | "trialing";
 };
 
+type ProfileCustomizationRow = {
+  user_id: string;
+  accent_color: string | null;
+};
+
+const DEFAULT_ACCENT_COLOR = "#ef4444";
+const ACCENT_COLOR_PRESETS = [
+  "#ef4444",
+  "#dc2626",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#06b6d4",
+  "#3b82f6",
+  "#a855f7",
+];
+
 export default function ProfileScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ onboarding?: string }>();
@@ -100,6 +117,9 @@ export default function ProfileScreen() {
   const [membership, setMembership] = useState<MembershipRow | null>(null);
   const [membershipLoading, setMembershipLoading] = useState(false);
   const [membershipError, setMembershipError] = useState<string | null>(null);
+  const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT_COLOR);
+  const [customizationLoading, setCustomizationLoading] = useState(false);
+  const [customizationSavingColor, setCustomizationSavingColor] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
   const [loadingLocal, setLoadingLocal] = useState(true);
@@ -285,6 +305,33 @@ export default function ProfileScreen() {
     if (activeTab !== "membership") return;
     void loadMembership();
   }, [activeTab, loadMembership]);
+
+  const loadCustomization = useCallback(async () => {
+    if (!myUserId) {
+      setAccentColor(DEFAULT_ACCENT_COLOR);
+      return;
+    }
+
+    setCustomizationLoading(true);
+    const { data, error: loadErr } = await supabase
+      .from("profile_customizations")
+      .select("user_id, accent_color")
+      .eq("user_id", myUserId)
+      .maybeSingle<ProfileCustomizationRow>();
+
+    if (loadErr) {
+      setCustomizationLoading(false);
+      return;
+    }
+
+    setAccentColor(data?.accent_color || DEFAULT_ACCENT_COLOR);
+    setCustomizationLoading(false);
+  }, [myUserId]);
+
+  useEffect(() => {
+    if (!myUserId) return;
+    void loadCustomization();
+  }, [myUserId, loadCustomization]);
 
   // -----------------------------
   // Pick + upload avatar
@@ -632,6 +679,31 @@ export default function ProfileScreen() {
   const membershipStatus = membership?.status ?? "inactive";
   const isPremium = membershipPlan === "premium" && membershipStatus === "active";
   const canAddAnotherCar = isPremium || cars.length === 0 || Boolean(editingCarId);
+  const appliedAccentColor = isPremium ? accentColor : DEFAULT_ACCENT_COLOR;
+
+  async function saveAccentColor(nextColor: string) {
+    if (!myUserId || !isPremium) return;
+    setCustomizationSavingColor(nextColor);
+
+    const { error: upsertErr } = await supabase
+      .from("profile_customizations")
+      .upsert(
+        {
+          user_id: myUserId,
+          accent_color: nextColor,
+        },
+        { onConflict: "user_id" }
+      );
+
+    if (upsertErr) {
+      Alert.alert("Could not save color", upsertErr.message);
+      setCustomizationSavingColor(null);
+      return;
+    }
+
+    setAccentColor(nextColor);
+    setCustomizationSavingColor(null);
+  }
 
   function renderTabButton(label: string, tab: ProfileTab) {
     const selected = activeTab === tab;
@@ -1025,6 +1097,39 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        <View style={s.field}>
+          <Text style={s.label}>Profile outline color</Text>
+          {isPremium ? (
+            <View style={s.accentPickerRow}>
+              {ACCENT_COLOR_PRESETS.map((color) => {
+                const selected = accentColor === color;
+                const savingThis = customizationSavingColor === color;
+                return (
+                  <Pressable
+                    key={color}
+                    disabled={savingThis || customizationLoading}
+                    onPress={() => {
+                      void saveAccentColor(color);
+                    }}
+                    style={[
+                      s.accentSwatch,
+                      { backgroundColor: color },
+                      selected && s.accentSwatchSelected,
+                      (savingThis || customizationLoading) && { opacity: 0.7 },
+                    ]}
+                  >
+                    {selected ? <Text style={s.accentSwatchCheck}>✓</Text> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={s.placeholderText}>
+              Premium unlocks custom profile outline colors.
+            </Text>
+          )}
+        </View>
+
         {error ? <Text style={s.error}>{error}</Text> : null}
 
         <View style={s.btnRow}>
@@ -1091,6 +1196,7 @@ export default function ProfileScreen() {
           onPress={editing ? pickImage : undefined}
           style={({ pressed }) => [
             s.avatarWrap,
+            { borderColor: appliedAccentColor },
             pressed && editing ? { opacity: 0.8 } : null,
           ]}
         >
