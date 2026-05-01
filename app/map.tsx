@@ -151,6 +151,7 @@ const DEFAULT_MARKER_BORDER_COLOR = colors.primary;
 
 type AnimatedUserMarkerProps = {
   userId: string;
+  zIndex: number;
   coordinate: AnimatedRegion;
   title: string;
   description: string;
@@ -173,6 +174,7 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
   markerBorderColor,
   onPress,
   onRef,
+  zIndex,
 }: AnimatedUserMarkerProps) {
   return (
     <MarkerAnimated
@@ -181,7 +183,7 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
       anchor={{ x: 0.5, y: 0.5 }}
       title={title}
       description={description}
-      zIndex={999}
+      zIndex={zIndex}
       onPress={() => onPress(userId)}
     >
       {markerUri ? (
@@ -962,8 +964,7 @@ export default function MapScreen() {
             }}
           >
             <View style={styles.meetMarkerWrap}>
-              <Text style={styles.meetMarkerIcon}>🚗</Text>
-              <Text style={styles.meetMarkerLabel}>MEET</Text>
+              <Text style={styles.meetMarkerIcon}>📍</Text>
             </View>
           </Marker>
         ))}
@@ -1037,6 +1038,7 @@ export default function MapScreen() {
             <AnimatedUserMarker
               key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
               userId={loc.user_id}
+              zIndex={loc.user_id === myUserId ? 1100 : 900}
               coordinate={animatedCoordinate}
               title={markerName}
               description={fresh ? "Live" : `Last seen ${lastSeen}`}

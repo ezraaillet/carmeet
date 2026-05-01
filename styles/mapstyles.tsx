@@ -146,25 +146,16 @@ const mapStyles = StyleSheet.create({
     fontWeight: "600",
   },
   meetMarkerWrap: {
-    minWidth: 56,
     alignItems: "center",
-    backgroundColor: "#b91c1c",
-    borderWidth: 2,
-    borderColor: "#fff",
-    borderRadius: 14,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    justifyContent: "center",
   },
   meetMarkerIcon: {
-    fontSize: 14,
-    lineHeight: 16,
-    color: "#fff",
-  },
-  meetMarkerLabel: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
+    fontSize: 38,
+    lineHeight: 40,
+    color: "#ef4444",
+    textShadowColor: "rgba(0,0,0,0.55)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 3,
   },
 });
 
