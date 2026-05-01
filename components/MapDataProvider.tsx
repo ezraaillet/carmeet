@@ -31,6 +31,10 @@ type Profile = {
   city?: string | null;
   state?: string | null;
   onboarded?: boolean | null;
+  membership_plan?: string | null;
+  membership_status?: string | null;
+  accent_color?: string | null;
+  is_active_premium?: boolean;
 };
 
 type Meet = {
@@ -282,6 +286,8 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         const [
           { data: locRows, error: locErr },
           { data: profRows, error: profErr },
+          { data: membershipRows, error: membershipErr },
+          { data: customizationRows, error: customizationErr },
         ] = await Promise.all([
           supabase.from("locations").select("*").in("user_id", uniq),
           supabase
@@ -290,14 +296,53 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
               "id, username, display_name, photo_url, location_visibility, bio, city, state, onboarded"
             )
             .in("id", uniq),
+          supabase
+            .from("user_memberships")
+            .select("user_id, plan, status")
+            .in("user_id", uniq),
+          supabase
+            .from("profile_customizations")
+            .select("user_id, accent_color")
+            .in("user_id", uniq),
         ]);
 
         if (locErr) throw locErr;
         if (profErr) throw profErr;
+        if (membershipErr) throw membershipErr;
+        if (customizationErr) throw customizationErr;
         if (refreshSeqRef.current !== requestId) return;
 
+        const membershipByUserId = new Map<
+          string,
+          { plan: string | null; status: string | null }
+        >();
+        (membershipRows ?? []).forEach((row: any) => {
+          membershipByUserId.set(row.user_id, {
+            plan: row.plan ?? null,
+            status: row.status ?? null,
+          });
+        });
+
+        const customizationByUserId = new Map<string, string | null>();
+        (customizationRows ?? []).forEach((row: any) => {
+          customizationByUserId.set(row.user_id, row.accent_color ?? null);
+        });
+
         const profMap: Record<string, Profile> = {};
-        (profRows ?? []).forEach((p: any) => (profMap[p.id] = p as Profile));
+        (profRows ?? []).forEach((p: any) => {
+          const membership = membershipByUserId.get(p.id);
+          const accentColor = customizationByUserId.get(p.id) ?? null;
+          const plan = membership?.plan ?? null;
+          const status = membership?.status ?? null;
+
+          profMap[p.id] = {
+            ...(p as Profile),
+            membership_plan: plan,
+            membership_status: status,
+            accent_color: accentColor,
+            is_active_premium: plan === "premium" && status === "active",
+          };
+        });
         setProfilesById((prev) => ({ ...prev, ...profMap }));
 
         (profRows ?? [])
@@ -373,7 +418,30 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
                   .maybeSingle<Profile>();
 
                 if (p) {
-                  setProfilesById((prev) => ({ ...prev, [p.id]: p }));
+                  const [{ data: membership }, { data: customization }] = await Promise.all([
+                    supabase
+                      .from("user_memberships")
+                      .select("plan, status")
+                      .eq("user_id", p.id)
+                      .maybeSingle<{ plan: string | null; status: string | null }>(),
+                    supabase
+                      .from("profile_customizations")
+                      .select("accent_color")
+                      .eq("user_id", p.id)
+                      .maybeSingle<{ accent_color: string | null }>(),
+                  ]);
+
+                  const plan = membership?.plan ?? null;
+                  const status = membership?.status ?? null;
+                  const enrichedProfile: Profile = {
+                    ...p,
+                    membership_plan: plan,
+                    membership_status: status,
+                    accent_color: customization?.accent_color ?? null,
+                    is_active_premium: plan === "premium" && status === "active",
+                  };
+
+                  setProfilesById((prev) => ({ ...prev, [p.id]: enrichedProfile }));
                   if (p.photo_url) Image.prefetch(p.photo_url);
                 }
               }

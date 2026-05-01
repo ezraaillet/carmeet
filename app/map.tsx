@@ -21,6 +21,7 @@ import MapView, {
 } from "react-native-maps";
 
 import styles from "@/styles/mapstyles";
+import { colors } from "@/styles/themes";
 import { supabase } from "../database/supabase";
 import { useFocusEffect } from "@react-navigation/native";
 import { useMapData } from "@/components/MapDataProvider";
@@ -42,6 +43,10 @@ type Profile = {
   display_name: string | null;
   photo_url: string | null;
   location_visibility?: string | null;
+  membership_plan?: string | null;
+  membership_status?: string | null;
+  accent_color?: string | null;
+  is_active_premium?: boolean;
 };
 
 function isFresh(updatedAt?: string | null, maxAgeMs = 2 * 60 * 1000) {
@@ -142,6 +147,7 @@ const OVERLAP_THRESHOLD_METERS = 1.5;
 const OVERLAP_SPREAD_RADIUS_METERS = 7;
 const CLUSTER_MIN_SIZE = 4;
 const CLUSTER_MAX_ZOOM_LATITUDE_DELTA = 0.012;
+const DEFAULT_MARKER_BORDER_COLOR = colors.primary;
 
 type AnimatedUserMarkerProps = {
   userId: string;
@@ -151,6 +157,7 @@ type AnimatedUserMarkerProps = {
   fresh: boolean;
   markerUri: string | null;
   markerInitials: string;
+  markerBorderColor: string;
   onPress: (userId: string) => void;
   onRef: (userId: string, marker: MarkerAnimated | null) => void;
 };
@@ -163,6 +170,7 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
   fresh,
   markerUri,
   markerInitials,
+  markerBorderColor,
   onPress,
   onRef,
 }: AnimatedUserMarkerProps) {
@@ -179,10 +187,18 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
       {markerUri ? (
         <Image
           source={{ uri: markerUri }}
-          style={[styles.icon, { opacity: fresh ? 1 : 0.45 }]}
+          style={[
+            styles.icon,
+            { opacity: fresh ? 1 : 0.45, borderColor: markerBorderColor },
+          ]}
         />
       ) : (
-        <View style={[styles.iconInitials, { opacity: fresh ? 1 : 0.45 }]}>
+        <View
+          style={[
+            styles.iconInitials,
+            { opacity: fresh ? 1 : 0.45, borderColor: markerBorderColor },
+          ]}
+        >
           <Text style={{ color: "white", fontWeight: "700" }}>
             {markerInitials}
           </Text>
@@ -1006,6 +1022,10 @@ export default function MapScreen() {
           const fresh = isFresh(loc.updated_at, 2 * 60 * 1000);
           const lastSeen = formatLastSeen(loc.updated_at);
           const markerUri = p?.photo_url ?? null;
+          const markerBorderColor =
+            p?.is_active_premium && p?.accent_color
+              ? p.accent_color
+              : DEFAULT_MARKER_BORDER_COLOR;
 
           const animatedCoordinate = getOrCreateAnimatedUserCoordinate(
             loc.user_id,
@@ -1023,6 +1043,7 @@ export default function MapScreen() {
               fresh={fresh}
               markerUri={markerUri}
               markerInitials={markerInitials}
+              markerBorderColor={markerBorderColor}
               onPress={handleMarkerPress}
               onRef={(userId, marker) => {
                 markerRefs.current[userId] = marker;
