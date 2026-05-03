@@ -2,6 +2,16 @@ import { StyleSheet } from "react-native";
 import { colors } from "./themes";
 
 const profileStyles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.black,
+  },
+
+  scroll: {
+    flex: 1,
+    backgroundColor: colors.black,
+  },
+
   // Main container
   container: {
     flexGrow: 1,

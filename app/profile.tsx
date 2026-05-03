@@ -1188,9 +1188,15 @@ export default function ProfileScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={{ flex: 1 }}
+      style={s.screen}
     >
-      <ScrollView contentContainerStyle={s.container}>
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={s.container}
+        showsVerticalScrollIndicator={false}
+        overScrollMode="never"
+        bounces={false}
+      >
         {/* Profile Header */}
         <Pressable
           onPress={editing ? pickImage : undefined}
