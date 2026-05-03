@@ -13,6 +13,8 @@ import {
   View,
 } from "react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import * as Linking from "expo-linking";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import s from "@/styles/profilestyles";
 import { supabase } from "../database/supabase";
@@ -33,6 +35,10 @@ type ProfileRow = {
   bio?: string | null;
   city?: string | null;
   state?: string | null;
+  instagram_handle?: string | null;
+  tiktok_handle?: string | null;
+  twitter_handle?: string | null;
+  snapchat_handle?: string | null;
   created_at?: string;
   onboarded?: boolean | null;
 };
@@ -95,6 +101,10 @@ export default function ProfileScreen() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [locationVis, setLocationVis] = useState("everyone");
   const [bio, setBio] = useState("");
+  const [instagramHandle, setInstagramHandle] = useState("");
+  const [tiktokHandle, setTiktokHandle] = useState("");
+  const [twitterHandle, setTwitterHandle] = useState("");
+  const [snapchatHandle, setSnapchatHandle] = useState("");
   const [city, setCity] = useState<string | null>(null);
   const [state, setState] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProfileTab>("about");
@@ -182,6 +192,10 @@ export default function ProfileScreen() {
           setPhotoUrl(cached.photo_url ?? null);
           setLocationVis(cached.location_visibility ?? "everyone");
           setBio(cached.bio ?? "");
+          setInstagramHandle(cached.instagram_handle ?? "");
+          setTiktokHandle(cached.tiktok_handle ?? "");
+          setTwitterHandle(cached.twitter_handle ?? "");
+          setSnapchatHandle(cached.snapchat_handle ?? "");
           setCity(cached.city ?? null);
           setState(cached.state ?? null);
           setLoadingLocal(false);
@@ -203,6 +217,10 @@ export default function ProfileScreen() {
         setPhotoUrl(row.photo_url ?? null);
         setLocationVis(row.location_visibility ?? "everyone");
         setBio(row.bio ?? "");
+        setInstagramHandle(row.instagram_handle ?? "");
+        setTiktokHandle(row.tiktok_handle ?? "");
+        setTwitterHandle(row.twitter_handle ?? "");
+        setSnapchatHandle(row.snapchat_handle ?? "");
         setCity(row.city ?? null);
         setState(row.state ?? null);
 
@@ -470,6 +488,10 @@ export default function ProfileScreen() {
       setPhotoUrl(profile.photo_url ?? null);
       setLocationVis(profile.location_visibility ?? "everyone");
       setBio(profile.bio ?? "");
+      setInstagramHandle(profile.instagram_handle ?? "");
+      setTiktokHandle(profile.tiktok_handle ?? "");
+      setTwitterHandle(profile.twitter_handle ?? "");
+      setSnapchatHandle(profile.snapchat_handle ?? "");
       setCity(profile.city ?? null);
       setState(profile.state ?? null);
     }
@@ -488,6 +510,10 @@ export default function ProfileScreen() {
       photo_url: photoUrl || null,
       location_visibility: locationVis || null,
       bio: bio.trim() || null,
+      instagram_handle: instagramHandle.trim() || null,
+      tiktok_handle: tiktokHandle.trim() || null,
+      twitter_handle: twitterHandle.trim() || null,
+      snapchat_handle: snapchatHandle.trim() || null,
       onboarded: true,
     };
 
@@ -507,6 +533,10 @@ export default function ProfileScreen() {
     // Update local immediately
     setProfile(data);
     setBio(data.bio ?? "");
+    setInstagramHandle(data.instagram_handle ?? "");
+    setTiktokHandle(data.tiktok_handle ?? "");
+    setTwitterHandle(data.twitter_handle ?? "");
+    setSnapchatHandle(data.snapchat_handle ?? "");
     setCity(data.city ?? null);
     setState(data.state ?? null);
     setEditing(false);
@@ -719,6 +749,41 @@ export default function ProfileScreen() {
       </Pressable>
     );
   }
+
+  function openSocialLink(url: string) {
+    void Linking.openURL(url);
+  }
+
+  function normalizedHandle(handle: string) {
+    return handle.trim().replace(/^@/, "");
+  }
+
+  const socialLinks = [
+    {
+      key: "instagram",
+      icon: "instagram",
+      handle: normalizedHandle(instagramHandle),
+      url: (handle: string) => `https://instagram.com/${handle}`,
+    },
+    {
+      key: "tiktok",
+      icon: "music-note",
+      handle: normalizedHandle(tiktokHandle),
+      url: (handle: string) => `https://www.tiktok.com/@${handle}`,
+    },
+    {
+      key: "twitter",
+      icon: "twitter",
+      handle: normalizedHandle(twitterHandle),
+      url: (handle: string) => `https://x.com/${handle}`,
+    },
+    {
+      key: "snapchat",
+      icon: "snapchat",
+      handle: normalizedHandle(snapchatHandle),
+      url: (handle: string) => `https://www.snapchat.com/add/${handle}`,
+    },
+  ].filter((social) => Boolean(social.handle));
 
   function renderAboutSection() {
     return (
@@ -1130,6 +1195,50 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        <View style={s.field}>
+          <Text style={s.label}>Social handles</Text>
+          {isPremium ? (
+            <>
+              <TextInput
+                value={instagramHandle}
+                onChangeText={setInstagramHandle}
+                placeholder="Instagram handle"
+                editable={editing}
+                style={[s.input, !editing && s.inputDisabled]}
+                autoCapitalize="none"
+              />
+              <TextInput
+                value={tiktokHandle}
+                onChangeText={setTiktokHandle}
+                placeholder="TikTok handle"
+                editable={editing}
+                style={[s.input, s.socialInput, !editing && s.inputDisabled]}
+                autoCapitalize="none"
+              />
+              <TextInput
+                value={twitterHandle}
+                onChangeText={setTwitterHandle}
+                placeholder="Twitter/X handle"
+                editable={editing}
+                style={[s.input, s.socialInput, !editing && s.inputDisabled]}
+                autoCapitalize="none"
+              />
+              <TextInput
+                value={snapchatHandle}
+                onChangeText={setSnapchatHandle}
+                placeholder="Snapchat handle"
+                editable={editing}
+                style={[s.input, s.socialInput, !editing && s.inputDisabled]}
+                autoCapitalize="none"
+              />
+            </>
+          ) : (
+            <Text style={s.placeholderText}>
+              Premium required to add social handles. Upgrade to unlock this section.
+            </Text>
+          )}
+        </View>
+
         {error ? <Text style={s.error}>{error}</Text> : null}
 
         <View style={s.btnRow}>
@@ -1230,6 +1339,25 @@ export default function ProfileScreen() {
           <Text style={s.usernameText}>@{username.trim() || "username"}</Text>
           {bio.trim() ? <Text style={s.bioText}>{bio}</Text> : null}
           {hasLocation ? <Text style={s.locationText}>{locationText}</Text> : null}
+          {socialLinks.length > 0 ? (
+            <View style={s.socialIconsRow}>
+              {socialLinks.map((social) => (
+                <Pressable
+                  key={social.key}
+                  onPress={() => openSocialLink(social.url(social.handle))}
+                  style={s.socialIconButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${social.key}`}
+                >
+                  <MaterialCommunityIcons
+                    name={social.icon as any}
+                    size={20}
+                    color="#fff"
+                  />
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
 
         <View style={s.headerActions}>
