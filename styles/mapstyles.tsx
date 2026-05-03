@@ -27,6 +27,103 @@ const mapStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
   },
+  publicProfileCard: {
+    maxHeight: "70%",
+  },
+  publicProfileScroll: {
+    marginTop: 10,
+  },
+  profileNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  premiumBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(239,68,68,0.2)",
+    borderWidth: 1,
+    borderColor: "#ef4444",
+  },
+  premiumBadgeText: {
+    color: "#ef4444",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  profileBio: {
+    color: "#ddd",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  socialRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  socialPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "rgba(239,68,68,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.7)",
+  },
+  socialPillText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  carsSection: {
+    marginTop: 14,
+    gap: 8,
+  },
+  carsTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  carRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  carPhoto: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    backgroundColor: "#141414",
+  },
+  carPhotoFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  carPhotoFallbackText: {
+    fontSize: 10,
+    color: "#aaa",
+    textAlign: "center",
+  },
+  carNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  carName: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  primaryTag: {
+    color: "#ef4444",
+    fontSize: 11,
+    fontWeight: "700",
+  },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",

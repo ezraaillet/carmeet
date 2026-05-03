@@ -6,8 +6,10 @@ import {
   Alert,
   Easing,
   Image,
+  Linking,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -42,11 +44,32 @@ type Profile = {
   username: string | null;
   display_name: string | null;
   photo_url: string | null;
+  bio?: string | null;
+  city?: string | null;
+  state?: string | null;
+  instagram_handle?: string | null;
+  tiktok_handle?: string | null;
+  twitter_handle?: string | null;
+  snapchat_handle?: string | null;
+  profile_visibility?: string | null;
   location_visibility?: string | null;
   membership_plan?: string | null;
   membership_status?: string | null;
   accent_color?: string | null;
   is_active_premium?: boolean;
+};
+
+type Car = {
+  id: string;
+  user_id: string;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  trim: string | null;
+  color: string | null;
+  description: string | null;
+  photo_url: string | null;
+  is_primary: boolean | null;
 };
 
 function isFresh(updatedAt?: string | null, maxAgeMs = 2 * 60 * 1000) {
@@ -245,6 +268,7 @@ export default function MapScreen() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [sendingRequest, setSendingRequest] = useState(false);
+  const [selectedUserCars, setSelectedUserCars] = useState<Car[]>([]);
 
   const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
   const [focusedClusterKey, setFocusedClusterKey] = useState<string | null>(null);
@@ -784,25 +808,49 @@ export default function MapScreen() {
       setSelectedUserId(userId);
       setProfileError(null);
 
-      const cached = profilesById[userId];
-      if (cached) {
-        setSelectedProfile(cached);
-        setProfileLoading(false);
-        return;
+      setProfileLoading(true);
+      setSelectedUserCars([]);
+      setSelectedProfile(profilesById[userId] ?? null);
+
+      const [{ data: profileData, error: profileErrorRaw }, { data: carsData, error: carsError }] =
+        await Promise.all([
+          supabase
+            .from("profiles")
+            .select(
+              "id, username, display_name, photo_url, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle, profile_visibility, location_visibility"
+            )
+            .eq("id", userId)
+            .maybeSingle<Profile>(),
+          supabase
+            .from("cars")
+            .select("id, user_id, make, model, year, trim, color, description, photo_url, is_primary")
+            .eq("user_id", userId)
+            .order("is_primary", { ascending: false })
+            .order("year", { ascending: false }),
+        ]);
+
+      if (profileErrorRaw) {
+        setProfileError(profileErrorRaw.message);
+      } else if (!profileData) {
+        setProfileError("No profile found for this user.");
+      } else {
+        const cached = profilesById[userId];
+        const merged: Profile = {
+          ...cached,
+          ...profileData,
+          membership_plan: cached?.membership_plan ?? null,
+          membership_status: cached?.membership_status ?? null,
+          accent_color: cached?.accent_color ?? null,
+          is_active_premium:
+            cached?.is_active_premium ??
+            (cached?.membership_plan === "premium" && cached?.membership_status === "active"),
+        };
+        setSelectedProfile(merged);
+        setProfileError(null);
       }
 
-      setProfileLoading(true);
-      setSelectedProfile(null);
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle<Profile>();
-
-      if (error) setProfileError(error.message);
-      else if (data) setSelectedProfile(data);
-      else setProfileError("No profile found for this user.");
+      if (carsError) setProfileError((prev) => prev ?? carsError.message);
+      else setSelectedUserCars(carsData ?? []);
 
       setProfileLoading(false);
     },
@@ -814,6 +862,7 @@ export default function MapScreen() {
     setSelectedProfile(null);
     setProfileError(null);
     setProfileLoading(false);
+    setSelectedUserCars([]);
   };
 
   const promptCompleteProfile = useCallback(() => {
@@ -941,6 +990,24 @@ export default function MapScreen() {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+  const locationLabel = [selectedProfile?.city, selectedProfile?.state]
+    .filter(Boolean)
+    .join(", ");
+  const hasCars = selectedUserCars.length > 0;
+  const socialEntries = [
+    selectedProfile?.instagram_handle
+      ? { key: "instagram", label: "Instagram", url: `https://instagram.com/${selectedProfile.instagram_handle.replace(/^@/, "")}` }
+      : null,
+    selectedProfile?.tiktok_handle
+      ? { key: "tiktok", label: "TikTok", url: `https://www.tiktok.com/@${selectedProfile.tiktok_handle.replace(/^@/, "")}` }
+      : null,
+    selectedProfile?.twitter_handle
+      ? { key: "twitter", label: "X", url: `https://x.com/${selectedProfile.twitter_handle.replace(/^@/, "")}` }
+      : null,
+    selectedProfile?.snapchat_handle
+      ? { key: "snapchat", label: "Snapchat", url: `https://www.snapchat.com/add/${selectedProfile.snapchat_handle.replace(/^@/, "")}` }
+      : null,
+  ].filter((entry): entry is { key: string; label: string; url: string } => Boolean(entry));
 
   return (
     <View style={{ flex: 1 }}>
@@ -1119,7 +1186,15 @@ export default function MapScreen() {
 
       {selectedUserId && !selectedMeetId && (
         <View style={styles.cardContainer}>
-          <View style={styles.card}>
+          <View
+            style={[
+              styles.card,
+              styles.publicProfileCard,
+              selectedProfile?.is_active_premium && selectedProfile?.accent_color
+                ? { borderColor: selectedProfile.accent_color }
+                : null,
+            ]}
+          >
             <View style={styles.cardHeader}>
               {selectedProfile?.photo_url ? (
                 <Image
@@ -1133,15 +1208,18 @@ export default function MapScreen() {
               )}
 
               <View style={{ flex: 1, marginLeft: 10 }}>
-                <Text style={styles.cardName}>{displayName}</Text>
+                <View style={styles.profileNameRow}>
+                  <Text style={styles.cardName}>{displayName}</Text>
+                  {selectedProfile?.is_active_premium ? (
+                    <View style={styles.premiumBadge}>
+                      <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+                    </View>
+                  ) : null}
+                </View>
                 {selectedProfile?.username && (
                   <Text style={styles.cardSub}>@{selectedProfile.username}</Text>
                 )}
-                {selectedProfile?.location_visibility && (
-                  <Text style={styles.cardSubSmall}>
-                    Location: {selectedProfile.location_visibility}
-                  </Text>
-                )}
+                {locationLabel ? <Text style={styles.cardSubSmall}>{locationLabel}</Text> : null}
 
                 {locationsById[selectedUserId]?.updated_at && (
                   <Text style={styles.cardSubSmall}>
@@ -1162,6 +1240,57 @@ export default function MapScreen() {
             )}
 
             {profileError && <Text style={styles.errorText}>{profileError}</Text>}
+            <ScrollView style={styles.publicProfileScroll} showsVerticalScrollIndicator={false}>
+              {selectedProfile?.bio ? (
+                <Text style={styles.profileBio}>{selectedProfile.bio}</Text>
+              ) : (
+                <Text style={styles.cardSubSmall}>No bio added.</Text>
+              )}
+
+              {socialEntries.length > 0 && (
+                <View style={styles.socialRow}>
+                  {socialEntries.map((social) => (
+                    <Pressable
+                      key={social.key}
+                      onPress={() => Linking.openURL(social.url)}
+                      style={({ pressed }) => [styles.socialPill, pressed && { opacity: 0.85 }]}
+                    >
+                      <Text style={styles.socialPillText}>{social.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
+              <View style={styles.carsSection}>
+                <Text style={styles.carsTitle}>Cars</Text>
+                {!hasCars ? (
+                  <Text style={styles.cardSubSmall}>No cars listed.</Text>
+                ) : (
+                  selectedUserCars.map((car) => {
+                    const title = [car.year, car.make, car.model].filter(Boolean).join(" ");
+                    const subtitle = [car.color, car.trim].filter(Boolean).join(" • ");
+                    return (
+                      <View key={car.id} style={styles.carRow}>
+                        {car.photo_url ? (
+                          <Image source={{ uri: car.photo_url }} style={styles.carPhoto} />
+                        ) : (
+                          <View style={[styles.carPhoto, styles.carPhotoFallback]}>
+                            <Text style={styles.carPhotoFallbackText}>No Photo</Text>
+                          </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.carNameRow}>
+                            <Text style={styles.carName}>{title || "Unknown car"}</Text>
+                            {car.is_primary ? <Text style={styles.primaryTag}>Primary</Text> : null}
+                          </View>
+                          {subtitle ? <Text style={styles.cardSubSmall}>{subtitle}</Text> : null}
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+            </ScrollView>
 
             <View style={styles.cardActions}>
               <Pressable
