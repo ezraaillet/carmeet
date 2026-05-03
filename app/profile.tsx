@@ -754,33 +754,33 @@ export default function ProfileScreen() {
     void Linking.openURL(url);
   }
 
-  function normalizedHandle(handle: string) {
-    return handle.trim().replace(/^@/, "");
+  function normalizedHandle(handle: string | null | undefined) {
+    return (handle ?? "").trim().replace(/^@/, "");
   }
 
   const socialLinks = [
     {
       key: "instagram",
       icon: "instagram",
-      handle: normalizedHandle(instagramHandle),
+      handle: normalizedHandle(profile?.instagram_handle ?? instagramHandle),
       url: (handle: string) => `https://instagram.com/${handle}`,
     },
     {
       key: "tiktok",
       icon: "music-note",
-      handle: normalizedHandle(tiktokHandle),
+      handle: normalizedHandle(profile?.tiktok_handle ?? tiktokHandle),
       url: (handle: string) => `https://www.tiktok.com/@${handle}`,
     },
     {
       key: "twitter",
       icon: "twitter",
-      handle: normalizedHandle(twitterHandle),
+      handle: normalizedHandle(profile?.twitter_handle ?? twitterHandle),
       url: (handle: string) => `https://x.com/${handle}`,
     },
     {
       key: "snapchat",
       icon: "snapchat",
-      handle: normalizedHandle(snapchatHandle),
+      handle: normalizedHandle(profile?.snapchat_handle ?? snapchatHandle),
       url: (handle: string) => `https://www.snapchat.com/add/${handle}`,
     },
   ].filter((social) => Boolean(social.handle));
@@ -1206,6 +1206,7 @@ export default function ProfileScreen() {
                 editable={editing}
                 style={[s.input, !editing && s.inputDisabled]}
                 autoCapitalize="none"
+                placeholderTextColor="#9ca3af"
               />
               <TextInput
                 value={tiktokHandle}
@@ -1214,6 +1215,7 @@ export default function ProfileScreen() {
                 editable={editing}
                 style={[s.input, s.socialInput, !editing && s.inputDisabled]}
                 autoCapitalize="none"
+                placeholderTextColor="#9ca3af"
               />
               <TextInput
                 value={twitterHandle}
@@ -1222,6 +1224,7 @@ export default function ProfileScreen() {
                 editable={editing}
                 style={[s.input, s.socialInput, !editing && s.inputDisabled]}
                 autoCapitalize="none"
+                placeholderTextColor="#9ca3af"
               />
               <TextInput
                 value={snapchatHandle}
@@ -1230,6 +1233,7 @@ export default function ProfileScreen() {
                 editable={editing}
                 style={[s.input, s.socialInput, !editing && s.inputDisabled]}
                 autoCapitalize="none"
+                placeholderTextColor="#9ca3af"
               />
             </>
           ) : (

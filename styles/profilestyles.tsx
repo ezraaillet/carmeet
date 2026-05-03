@@ -160,18 +160,18 @@ const profileStyles = StyleSheet.create({
   },
 
   input: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.gunmetal,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ddd",
-    color: "#111",
+    borderColor: colors.steel,
+    color: colors.offwhite,
   },
 
   inputDisabled: {
-    backgroundColor: "#f3f3f3",
-    color: "#666",
+    backgroundColor: colors.charcoal,
+    color: colors.silver,
   },
 
   socialInput: {
