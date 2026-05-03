@@ -108,6 +108,21 @@ const profileStyles = StyleSheet.create({
     textAlign: "center",
   },
 
+  socialIconsRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  socialIconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.gunmetal,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   locationText: {
     marginTop: 6,
     color: colors.silver,
@@ -157,6 +172,10 @@ const profileStyles = StyleSheet.create({
   inputDisabled: {
     backgroundColor: "#f3f3f3",
     color: "#666",
+  },
+
+  socialInput: {
+    marginTop: 8,
   },
 
   textarea: {
