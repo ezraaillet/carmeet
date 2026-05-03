@@ -196,7 +196,7 @@ function RootLayoutInner() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.black }}>
       {/* Header stays on top */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>CarMeet</Text>
@@ -223,7 +223,7 @@ function RootLayoutInner() {
         )}
       </View>
 
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, backgroundColor: colors.black }}>
         <Tabs
           screenOptions={({ route }) => ({
             headerShown: false,
@@ -233,6 +233,9 @@ function RootLayoutInner() {
               backgroundColor: colors.black,
               borderTopColor: colors.gunmetal,
               borderTopWidth: 1,
+            },
+            sceneStyle: {
+              backgroundColor: colors.black,
             },
             tabBarIcon: ({ color, size }) => {
               const name =
