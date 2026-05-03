@@ -1089,6 +1089,28 @@ export default function ProfileScreen() {
     return (
       <View style={s.sectionCard}>
         <Text style={s.sectionTitle}>Settings</Text>
+        <View style={s.field}>
+          <Text style={s.label}>Profile photo</Text>
+          <View style={s.settingsPhotoRow}>
+            <View style={[s.settingsPhotoWrap, { borderColor: appliedAccentColor }]}>
+              {photoUrl ? (
+                <Image source={{ uri: photoUrl }} style={s.settingsPhotoPreview} />
+              ) : (
+                <View style={[s.settingsPhotoPreview, s.avatarFallback]}>
+                  <Text style={s.avatarInitials}>{initials || "?"}</Text>
+                </View>
+              )}
+            </View>
+            {editing ? (
+              <Pressable onPress={pickImage} style={s.secondaryBtn}>
+                <Text style={s.secondaryBtnText}>Change photo</Text>
+              </Pressable>
+            ) : (
+              <Text style={s.placeholderText}>Tap Start Editing to change your photo.</Text>
+            )}
+          </View>
+        </View>
+
         {/* Username */}
         <View style={s.field}>
           <Text style={s.label}>Username</Text>
@@ -1311,12 +1333,10 @@ export default function ProfileScreen() {
         bounces={false}
       >
         {/* Profile Header */}
-        <Pressable
-          onPress={editing ? pickImage : undefined}
-          style={({ pressed }) => [
+        <View
+          style={[
             s.avatarWrap,
             { borderColor: appliedAccentColor },
-            pressed && editing ? { opacity: 0.8 } : null,
           ]}
         >
           {photoUrl ? (
@@ -1326,8 +1346,7 @@ export default function ProfileScreen() {
               <Text style={s.avatarInitials}>{initials || "?"}</Text>
             </View>
           )}
-          {editing && <Text style={s.changePhoto}>Change photo</Text>}
-        </Pressable>
+        </View>
 
         <View style={s.headerTextWrap}>
           <View style={s.displayNameRow}>
