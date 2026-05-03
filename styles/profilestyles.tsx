@@ -56,10 +56,22 @@ const profileStyles = StyleSheet.create({
     color: colors.gunmetal,
   },
 
-  changePhoto: {
-    marginTop: 8,
-    fontWeight: "600",
-    color: colors.primary,
+  settingsPhotoRow: {
+    gap: 10,
+  },
+
+  settingsPhotoWrap: {
+    alignSelf: "flex-start",
+    borderWidth: 2,
+    borderRadius: 999,
+    padding: 3,
+  },
+
+  settingsPhotoPreview: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "#eee",
   },
 
   headerTextWrap: {
