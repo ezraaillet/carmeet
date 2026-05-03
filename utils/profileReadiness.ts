@@ -4,6 +4,13 @@ export type MapProfileFields = {
   display_name?: string | null;
   location_visibility?: string | null;
   photo_url?: string | null;
+  bio?: string | null;
+  city?: string | null;
+  state?: string | null;
+  instagram_handle?: string | null;
+  tiktok_handle?: string | null;
+  twitter_handle?: string | null;
+  snapchat_handle?: string | null;
 };
 
 export type UserMembershipFields = {
@@ -35,7 +42,7 @@ export async function ensureMinimalProfileExists(
 
   const { data, error: selectError } = await supabase
     .from("profiles")
-    .select("id, username, display_name, location_visibility, photo_url")
+    .select("id, username, display_name, location_visibility, photo_url, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle")
     .eq("id", uid)
     .maybeSingle<MapProfileFields>();
 
@@ -70,7 +77,7 @@ export async function ensureMinimalProfileExists(
 
   const { data: ensured, error: ensuredError } = await supabase
     .from("profiles")
-    .select("id, username, display_name, location_visibility, photo_url")
+    .select("id, username, display_name, location_visibility, photo_url, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle")
     .eq("id", uid)
     .single<MapProfileFields>();
 

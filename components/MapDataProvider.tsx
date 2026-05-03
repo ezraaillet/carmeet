@@ -30,6 +30,10 @@ type Profile = {
   bio?: string | null;
   city?: string | null;
   state?: string | null;
+  instagram_handle?: string | null;
+  tiktok_handle?: string | null;
+  twitter_handle?: string | null;
+  snapchat_handle?: string | null;
   onboarded?: boolean | null;
   membership_plan?: string | null;
   membership_status?: string | null;
@@ -293,7 +297,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           supabase
             .from("profiles")
             .select(
-              "id, username, display_name, photo_url, location_visibility, bio, city, state, onboarded"
+              "id, username, display_name, photo_url, location_visibility, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle, onboarded"
             )
             .in("id", uniq),
           supabase
@@ -412,7 +416,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
                 const { data: p } = await supabase
                   .from("profiles")
                   .select(
-                    "id, username, display_name, photo_url, location_visibility, bio, city, state, onboarded"
+                    "id, username, display_name, photo_url, location_visibility, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle, onboarded"
                   )
                   .eq("id", row.user_id)
                   .maybeSingle<Profile>();
