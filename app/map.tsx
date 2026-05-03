@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import MapView, {
   AnimatedRegion,
@@ -236,6 +237,8 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
 export default function MapScreen() {
   const router = useRouter();
   const mapRef = useRef<MapView | null>(null);
+  const { height: screenHeight } = useWindowDimensions();
+  const profileCardMaxHeight = Math.min(screenHeight * 0.78, 640);
 
   const {
     profilesById,
@@ -1190,6 +1193,7 @@ export default function MapScreen() {
             style={[
               styles.card,
               styles.publicProfileCard,
+              { maxHeight: profileCardMaxHeight },
               selectedProfile?.is_active_premium && selectedProfile?.accent_color
                 ? { borderColor: selectedProfile.accent_color }
                 : null,
@@ -1240,7 +1244,11 @@ export default function MapScreen() {
             )}
 
             {profileError && <Text style={styles.errorText}>{profileError}</Text>}
-            <ScrollView style={styles.publicProfileScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.publicProfileScroll}
+              contentContainerStyle={styles.publicProfileScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
               {selectedProfile?.bio ? (
                 <Text style={styles.profileBio}>{selectedProfile.bio}</Text>
               ) : (

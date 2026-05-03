@@ -15,7 +15,7 @@ const mapStyles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 30,
+    bottom: 78,
     alignItems: "center",
   },
   card: {
@@ -28,10 +28,14 @@ const mapStyles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.1)",
   },
   publicProfileCard: {
-    maxHeight: "70%",
+    minHeight: 320,
   },
   publicProfileScroll: {
     marginTop: 10,
+    flexGrow: 0,
+  },
+  publicProfileScrollContent: {
+    paddingBottom: 10,
   },
   profileNameRow: {
     flexDirection: "row",
