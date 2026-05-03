@@ -140,6 +140,8 @@ export default function Home() {
     myUserId,
     locationsById,
     loading: mapLoading,
+    friendsLoaded,
+    error: mapError,
     meets,
     myMeetAttendanceByMeetId,
     meetAttendeeSummaryByMeetId,
@@ -837,7 +839,21 @@ export default function Home() {
                       </Pressable>
                     </View>
 
-                    {mapLoading ? (
+                    {!friendsLoaded && mapLoading ? (
+                      <View style={styles.friendsEmptyState}>
+                        <ActivityIndicator />
+                        <Text style={styles.homeTabContentText}>
+                          Loading friends…
+                        </Text>
+                      </View>
+                    ) : mapError && friendProfiles.length === 0 ? (
+                      <View style={styles.friendsEmptyState}>
+                        <Text style={styles.friendsEmptyTitle}>Unable to load friends</Text>
+                        <Text style={styles.homeTabContentText}>
+                          Pull to refresh and try again.
+                        </Text>
+                      </View>
+                    ) : !friendsLoaded ? (
                       <View style={styles.friendsEmptyState}>
                         <ActivityIndicator />
                         <Text style={styles.homeTabContentText}>
