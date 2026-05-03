@@ -75,6 +75,7 @@ type MeetAttendeeSummary = {
 
 type MapDataState = {
   loading: boolean;
+  friendsLoaded: boolean;
   error: string | null;
   myUserId: string | null;
   friendIds: string[];
@@ -123,6 +124,7 @@ function dedupeMeets(rows: Meet[]) {
 
 export function MapDataProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false);
+  const [friendsLoaded, setFriendsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [myUserId, setMyUserId] = useState<string | null>(null);
@@ -377,6 +379,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         currentUserIdRef.current = uid;
 
         if (previousUid !== uid) {
+          setFriendsLoaded(false);
           setFriendIds([]);
           setIds([]);
           setProfilesById({});
@@ -387,13 +390,16 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (!uid) {
+          setFriendsLoaded(false);
           setFriendIds([]);
           return;
         }
 
+        setFriendsLoaded(false);
         const friendIds = await fetchFriendIds(uid);
         if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
         setFriendIds(friendIds);
+        setFriendsLoaded(true);
         const baseIds = Array.from(new Set([uid, ...friendIds]));
         setIds(baseIds);
 
@@ -505,6 +511,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           await loadForIds(missing);
         }
       } catch (e: any) {
+        setFriendsLoaded(false);
         setError(e?.message ?? "Failed to load map data.");
       } finally {
         setLoading(false);
@@ -536,6 +543,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       loading,
+      friendsLoaded,
       error,
       myUserId,
       friendIds,
@@ -551,6 +559,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       loading,
+      friendsLoaded,
       error,
       myUserId,
       friendIds,
