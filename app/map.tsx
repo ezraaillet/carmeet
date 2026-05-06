@@ -73,6 +73,9 @@ type Car = {
   is_primary: boolean | null;
 };
 
+
+
+type FriendRelationshipState = "none" | "friends" | "request_sent" | "request_received";
 function isFresh(updatedAt?: string | null, maxAgeMs = 2 * 60 * 1000) {
   if (!updatedAt) return false;
   const t = new Date(updatedAt).getTime();
@@ -174,6 +177,7 @@ const CLUSTER_MAX_ZOOM_LATITUDE_DELTA = 0.012;
 const DEFAULT_MARKER_BORDER_COLOR = colors.primary;
 
 type AnimatedUserMarkerProps = {
+  tracksViewChanges?: boolean;
   userId: string;
   zIndex: number;
   coordinate: AnimatedRegion;
@@ -184,7 +188,7 @@ type AnimatedUserMarkerProps = {
   markerInitials: string;
   markerBorderColor: string;
   onPress: (userId: string) => void;
-  onRef: (userId: string, marker: MarkerAnimated | null) => void;
+  onRef: (userId: string, marker: any) => void;
 };
 
 const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
@@ -199,6 +203,7 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
   onPress,
   onRef,
   zIndex,
+  tracksViewChanges = false,
 }: AnimatedUserMarkerProps) {
   return (
     <MarkerAnimated
@@ -209,6 +214,8 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
       description={description}
       zIndex={zIndex}
       onPress={() => onPress(userId)}
+      tracksViewChanges={tracksViewChanges}
+      stopPropagation
     >
       {markerUri ? (
         <Image
@@ -272,11 +279,13 @@ export default function MapScreen() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [sendingRequest, setSendingRequest] = useState(false);
   const [selectedUserCars, setSelectedUserCars] = useState<Car[]>([]);
+  const [friendRelationshipState, setFriendRelationshipState] =
+    useState<FriendRelationshipState>("none");
 
   const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
   const [focusedClusterKey, setFocusedClusterKey] = useState<string | null>(null);
   const animatedUserCoordsRef = useRef<Record<string, AnimatedRegion>>({});
-  const markerRefs = useRef<Record<string, MarkerAnimated | null>>({});
+  const markerRefs = useRef<Record<string, any>>({});
   const lastAnimatedTargetsRef = useRef<
     Record<string, { latitude: number; longitude: number }>
   >({});
@@ -813,24 +822,50 @@ export default function MapScreen() {
 
       setProfileLoading(true);
       setSelectedUserCars([]);
+      setFriendRelationshipState("none");
       setSelectedProfile(profilesById[userId] ?? null);
 
-      const [{ data: profileData, error: profileErrorRaw }, { data: carsData, error: carsError }] =
-        await Promise.all([
-          supabase
-            .from("profiles")
-            .select(
-              "id, username, display_name, photo_url, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle, profile_visibility, location_visibility"
-            )
-            .eq("id", userId)
-            .maybeSingle<Profile>(),
-          supabase
-            .from("cars")
-            .select("id, user_id, make, model, year, trim, color, description, photo_url, is_primary")
-            .eq("user_id", userId)
-            .order("is_primary", { ascending: false })
-            .order("year", { ascending: false }),
-        ]);
+      const [
+        { data: profileData, error: profileErrorRaw },
+        { data: carsData, error: carsError },
+        { data: friendshipData, error: friendshipError },
+        { data: outgoingRequestData, error: outgoingRequestError },
+        { data: incomingRequestData, error: incomingRequestError },
+      ] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select(
+            "id, username, display_name, photo_url, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle, profile_visibility, location_visibility"
+          )
+          .eq("id", userId)
+          .maybeSingle<Profile>(),
+        supabase
+          .from("cars")
+          .select("id, user_id, make, model, year, trim, color, description, photo_url, is_primary")
+          .eq("user_id", userId)
+          .order("is_primary", { ascending: false })
+          .order("year", { ascending: false }),
+        supabase
+          .from("friendships")
+          .select("id")
+          .eq("status", "accepted")
+          .or(`and(user_id.eq.${myUserId},friend_id.eq.${userId}),and(user_id.eq.${userId},friend_id.eq.${myUserId})`)
+          .maybeSingle(),
+        supabase
+          .from("friend_requests")
+          .select("id")
+          .eq("from_user_id", myUserId)
+          .eq("to_user_id", userId)
+          .eq("status", "pending")
+          .maybeSingle(),
+        supabase
+          .from("friend_requests")
+          .select("id")
+          .eq("from_user_id", userId)
+          .eq("to_user_id", myUserId)
+          .eq("status", "pending")
+          .maybeSingle(),
+      ]);
 
       if (profileErrorRaw) {
         setProfileError(profileErrorRaw.message);
@@ -855,6 +890,22 @@ export default function MapScreen() {
       if (carsError) setProfileError((prev) => prev ?? carsError.message);
       else setSelectedUserCars(carsData ?? []);
 
+      const relationshipQueryError =
+        friendshipError || outgoingRequestError || incomingRequestError;
+      if (relationshipQueryError) {
+        setProfileError((prev) => prev ?? relationshipQueryError.message);
+      }
+
+      if (friendshipData) {
+        setFriendRelationshipState("friends");
+      } else if (outgoingRequestData) {
+        setFriendRelationshipState("request_sent");
+      } else if (incomingRequestData) {
+        setFriendRelationshipState("request_received");
+      } else {
+        setFriendRelationshipState("none");
+      }
+
       setProfileLoading(false);
     },
     [myUserId, profilesById]
@@ -866,6 +917,7 @@ export default function MapScreen() {
     setProfileError(null);
     setProfileLoading(false);
     setSelectedUserCars([]);
+    setFriendRelationshipState("none");
   };
 
   const promptCompleteProfile = useCallback(() => {
@@ -901,6 +953,7 @@ export default function MapScreen() {
   const sendFriendRequest = useCallback(async () => {
     if (!myUserId || !selectedUserId) return;
     if (myUserId === selectedUserId) return;
+    if (friendRelationshipState !== "none") return;
     const canProceed = await canUseProfileGatedActions();
     if (!canProceed) return;
 
@@ -917,11 +970,12 @@ export default function MapScreen() {
         setProfileError(error.message);
       } else {
         setProfileError(null);
+        setFriendRelationshipState("request_sent");
       }
     } finally {
       setSendingRequest(false);
     }
-  }, [myUserId, selectedUserId, canUseProfileGatedActions]);
+  }, [myUserId, selectedUserId, canUseProfileGatedActions, friendRelationshipState]);
 
   if (checkingAuth) {
     return (
@@ -1301,20 +1355,38 @@ export default function MapScreen() {
             </ScrollView>
 
             <View style={styles.cardActions}>
-              <Pressable
-                onPress={sendFriendRequest}
-                disabled={sendingRequest || !!profileError || profileLoading}
-                style={({ pressed }) => [
-                  styles.friendBtn,
-                  (pressed || sendingRequest) && { opacity: 0.8 },
-                ]}
-              >
-                {sendingRequest ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.friendBtnText}>Send Friend Request</Text>
-                )}
-              </Pressable>
+              {friendRelationshipState !== "friends" ? (
+                <Pressable
+                  onPress={friendRelationshipState === "none" ? sendFriendRequest : undefined}
+                  disabled={
+                    sendingRequest ||
+                    !!profileError ||
+                    profileLoading ||
+                    friendRelationshipState !== "none"
+                  }
+                  style={({ pressed }) => [
+                    styles.friendBtn,
+                    friendRelationshipState !== "none" && styles.friendBtnDisabled,
+                    (pressed || sendingRequest) && { opacity: 0.8 },
+                  ]}
+                >
+                  {sendingRequest ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.friendBtnText}>
+                      {friendRelationshipState === "request_sent"
+                        ? "Request Sent"
+                        : friendRelationshipState === "request_received"
+                          ? "Respond"
+                          : "Send Friend Request"}
+                    </Text>
+                  )}
+                </Pressable>
+              ) : (
+                <View style={styles.friendBadge}>
+                  <Text style={styles.friendBadgeText}>Friends</Text>
+                </View>
+              )}
             </View>
           </View>
         </View>

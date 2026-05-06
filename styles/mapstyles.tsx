@@ -19,23 +19,24 @@ const mapStyles = StyleSheet.create({
     alignItems: "center",
   },
   card: {
-    width: "90%",
-    maxWidth: 420,
+    width: "92%",
+    maxWidth: 440,
     borderRadius: 16,
     padding: 14,
-    backgroundColor: "rgba(0,0,0,0.9)",
+    backgroundColor: "rgba(6,6,6,0.97)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
   },
   publicProfileCard: {
     minHeight: 320,
+    paddingBottom: 72,
   },
   publicProfileScroll: {
     marginTop: 10,
     flexGrow: 0,
   },
   publicProfileScrollContent: {
-    paddingBottom: 10,
+    paddingBottom: 12,
   },
   profileNameRow: {
     flexDirection: "row",
@@ -202,12 +203,14 @@ const mapStyles = StyleSheet.create({
     color: "#fff",
   },
   cardActions: {
-    marginTop: 12,
+    position: "absolute",
+    right: 14,
+    bottom: 12,
     flexDirection: "row",
     justifyContent: "flex-end",
   },
   friendBtn: {
-    backgroundColor: "#1e90ff",
+    backgroundColor: "#ef4444",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
@@ -216,6 +219,22 @@ const mapStyles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
   },
+  friendBtnDisabled: {
+    backgroundColor: "rgba(239,68,68,0.45)",
+  },
+  friendBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.85)",
+    backgroundColor: "rgba(239,68,68,0.2)",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  friendBadgeText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+
   errorText: {
     marginTop: 8,
     color: "crimson",
