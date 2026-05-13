@@ -244,6 +244,13 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
 export default function MapScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ focusMeetId?: string; latitude?: string; longitude?: string }>();
+  const hasRequestedMeetTarget = useMemo(() => {
+    const hasMeetId = typeof params.focusMeetId === "string" && params.focusMeetId.length > 0;
+    const latitude = Number(params.latitude);
+    const longitude = Number(params.longitude);
+    const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+    return hasMeetId || hasCoordinates;
+  }, [params.focusMeetId, params.latitude, params.longitude]);
   const mapRef = useRef<MapView | null>(null);
   const { height: screenHeight } = useWindowDimensions();
   const profileCardMaxHeight = Math.min(screenHeight * 0.78, 640);
@@ -421,13 +428,15 @@ export default function MapScreen() {
             longitude: current.coords.longitude,
           }));
 
-          mapRef.current?.animateCamera({
-            center: {
-              latitude: current.coords.latitude,
-              longitude: current.coords.longitude,
-            },
-            zoom: 15,
-          });
+          if (!hasRequestedMeetTarget) {
+            mapRef.current?.animateCamera({
+              center: {
+                latitude: current.coords.latitude,
+                longitude: current.coords.longitude,
+              },
+              zoom: 15,
+            });
+          }
 
           setGotFix(true);
 
@@ -479,6 +488,7 @@ export default function MapScreen() {
       upsertMyLocation,
       setMyLiveLocation,
       myUserId,
+      hasRequestedMeetTarget,
     ])
   );
 
