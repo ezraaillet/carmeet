@@ -28,7 +28,7 @@ import { colors } from "@/styles/themes";
 import { supabase } from "../database/supabase";
 import { useFocusEffect } from "@react-navigation/native";
 import { useMapData } from "@/components/MapDataProvider";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
 
 type LiveLoc = {
@@ -243,6 +243,7 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
 
 export default function MapScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ focusMeetId?: string; latitude?: string; longitude?: string }>();
   const mapRef = useRef<MapView | null>(null);
   const { height: screenHeight } = useWindowDimensions();
   const profileCardMaxHeight = Math.min(screenHeight * 0.78, 640);
@@ -716,6 +717,38 @@ export default function MapScreen() {
         longitude: Number(meet.longitude),
       }));
   }, [meets]);
+
+
+  useEffect(() => {
+    const focusMeetId = params.focusMeetId;
+    if (!focusMeetId || typeof focusMeetId !== "string" || meetMarkers.length === 0) return;
+
+    const fallbackLatitude = Number(params.latitude);
+    const fallbackLongitude = Number(params.longitude);
+
+    const requestedMeet = meetMarkers.find((meet) => meet.id === focusMeetId);
+    const targetLatitude = requestedMeet?.latitude ?? fallbackLatitude;
+    const targetLongitude = requestedMeet?.longitude ?? fallbackLongitude;
+
+    if (!Number.isFinite(targetLatitude) || !Number.isFinite(targetLongitude)) return;
+
+    setSelectedUserId(null);
+    setSelectedProfile(null);
+    setSelectedUserCars([]);
+    setProfileError(null);
+    setProfileLoading(false);
+    setSelectedMeetId(focusMeetId);
+
+    mapRef.current?.animateToRegion(
+      {
+        latitude: targetLatitude,
+        longitude: targetLongitude,
+        latitudeDelta: 0.015,
+        longitudeDelta: 0.015,
+      },
+      700
+    );
+  }, [meetMarkers, params.focusMeetId, params.latitude, params.longitude]);
 
   const userMarkerItems = useMemo(
     () =>

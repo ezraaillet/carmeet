@@ -282,6 +282,30 @@ export default function Home() {
   }, [meetCards, meetSearchDateInput, meetSearchTitleInput]);
 
   const hasMeetFilters = Boolean(meetSearchTitleInput.trim() || meetSearchDateInput);
+
+
+  const handleViewMeetOnMap = (meet: { id: string; latitude: number | null; longitude: number | null }) => {
+    const latitude = Number(meet.latitude);
+    const longitude = Number(meet.longitude);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+    router.navigate({
+      pathname: "/map",
+      params: {
+        focusMeetId: meet.id,
+        latitude: String(latitude),
+        longitude: String(longitude),
+      },
+    });
+  };
+
+  const hasValidMeetCoordinates = (meet: { latitude: number | null; longitude: number | null }) => {
+    const latitude = Number(meet.latitude);
+    const longitude = Number(meet.longitude);
+    return Number.isFinite(latitude) && Number.isFinite(longitude);
+  };
+
   const membershipPlan = membership?.plan ?? "free";
   const membershipStatus = membership?.status ?? "inactive";
   const isPremium = membershipPlan === "premium" && membershipStatus === "active";
@@ -1089,6 +1113,18 @@ export default function Home() {
                                 Your status: {formatMeetStatus(meet.attendance)}
                               </Text>
                             )}
+
+                            {hasValidMeetCoordinates(meet) ? (
+                              <Pressable
+                                onPress={() => handleViewMeetOnMap(meet)}
+                                style={({ pressed }) => [
+                                  styles.meetViewOnMapButton,
+                                  pressed && styles.meetViewOnMapButtonPressed,
+                                ]}
+                              >
+                                <Text style={styles.meetViewOnMapButtonText}>View on Map</Text>
+                              </Pressable>
+                            ) : null}
 
                             <View style={styles.meetAttendanceButtonsRow}>
                               <Pressable
