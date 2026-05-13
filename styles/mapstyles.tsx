@@ -246,6 +246,21 @@ const mapStyles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  getDirectionsBtn: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    backgroundColor: "#ef4444",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  getDirectionsBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 13,
+  },
   meetTagsRow: {
     marginTop: 10,
     flexDirection: "row",
