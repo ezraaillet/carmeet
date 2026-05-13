@@ -30,142 +30,21 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useMapData } from "@/components/MapDataProvider";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
-
-type LiveLoc = {
-  user_id: string;
-  lat: number;
-  lng: number;
-  heading?: number;
-  speed?: number;
-  updated_at?: string;
-};
-
-type Profile = {
-  id: string;
-  username: string | null;
-  display_name: string | null;
-  photo_url: string | null;
-  bio?: string | null;
-  city?: string | null;
-  state?: string | null;
-  instagram_handle?: string | null;
-  tiktok_handle?: string | null;
-  twitter_handle?: string | null;
-  snapchat_handle?: string | null;
-  profile_visibility?: string | null;
-  location_visibility?: string | null;
-  membership_plan?: string | null;
-  membership_status?: string | null;
-  accent_color?: string | null;
-  is_active_premium?: boolean;
-};
-
-type Car = {
-  id: string;
-  user_id: string;
-  make: string | null;
-  model: string | null;
-  year: number | null;
-  trim: string | null;
-  color: string | null;
-  description: string | null;
-  photo_url: string | null;
-  is_primary: boolean | null;
-};
-
-
-
-type FriendRelationshipState = "none" | "friends" | "request_sent" | "request_received";
-function isFresh(updatedAt?: string | null, maxAgeMs = 2 * 60 * 1000) {
-  if (!updatedAt) return false;
-  const t = new Date(updatedAt).getTime();
-  if (!Number.isFinite(t)) return false;
-  return Date.now() - t <= maxAgeMs;
-}
-
-function formatLastSeen(updatedAt?: string | null) {
-  if (!updatedAt) return "unknown";
-  const t = new Date(updatedAt).getTime();
-  if (!Number.isFinite(t)) return "unknown";
-  const diffMs = Date.now() - t;
-  const sec = Math.max(0, Math.floor(diffMs / 1000));
-  if (sec < 60) return `${sec}s ago`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const d = Math.floor(hr / 24);
-  return `${d}d ago`;
-}
-
-function formatMeetWhen(startTime?: string | null, endTime?: string | null) {
-  if (!startTime) return "Time TBD";
-
-  const start = new Date(startTime);
-  const end = endTime ? new Date(endTime) : null;
-
-  if (!Number.isFinite(start.getTime())) return "Time TBD";
-
-  const startLabel = start.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-
-  if (!end || !Number.isFinite(end.getTime())) return startLabel;
-
-  const sameDay = start.toDateString() === end.toDateString();
-  if (sameDay) {
-    const endClock = end.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-
-    return `${startLabel} - ${endClock}`;
-  }
-
-  const endLabel = end.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-
-  return `${startLabel} → ${endLabel}`;
-}
-
-function formatMeetStatus(status?: string | null) {
-  if (!status) return "Planned";
-  return status
-    .replace(/[_-]/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function distanceInMeters(a: LiveLoc, b: LiveLoc) {
-  const avgLatRad = (((a.lat + b.lat) / 2) * Math.PI) / 180;
-  const metersPerDegLat = 111_111;
-  const metersPerDegLng = 111_111 * Math.cos(avgLatRad);
-
-  const dLat = (a.lat - b.lat) * metersPerDegLat;
-  const dLng = (a.lng - b.lng) * metersPerDegLng;
-
-  return Math.hypot(dLat, dLng);
-}
-
-function distanceBetweenCoordsMeters(
-  a: { latitude: number; longitude: number },
-  b: { latitude: number; longitude: number }
-) {
-  const avgLatRad = (((a.latitude + b.latitude) / 2) * Math.PI) / 180;
-  const metersPerDegLat = 111_111;
-  const metersPerDegLng = 111_111 * Math.cos(avgLatRad);
-
-  const dLat = (a.latitude - b.latitude) * metersPerDegLat;
-  const dLng = (a.longitude - b.longitude) * metersPerDegLng;
-
-  return Math.hypot(dLat, dLng);
-}
+import {
+  distanceBetweenCoordsMeters,
+  distanceInMeters,
+  formatLastSeen,
+  formatMeetStatus,
+  formatMeetWhen,
+  isFresh,
+} from "@/features/map/mapHelpers";
+import {
+  fetchUserMarkerCardData,
+  getCurrentAuthUser,
+  insertFriendRequest,
+  upsertLocation,
+} from "@/features/map/mapService";
+import { Car, FriendRelationshipState, LiveLoc, Profile } from "@/features/map/mapTypes";
 
 const MARKER_JITTER_THRESHOLD_METERS = 2;
 const MARKER_SNAP_THRESHOLD_METERS = 350;
@@ -302,9 +181,7 @@ export default function MapScreen() {
     let mounted = true;
 
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentAuthUser();
       if (mounted) {
         setAuthed(!!user);
         setMyUserId(user?.id ?? null);
@@ -375,18 +252,15 @@ export default function MapScreen() {
 
   const upsertMyLocation = useCallback(
     async (lat: number, lng: number, heading?: number, speed?: number) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentAuthUser();
       if (!user) return;
 
-      const { error } = await supabase.from("locations").upsert({
-        user_id: user.id,
+      const { error } = await upsertLocation({
+        userId: user.id,
         lat,
         lng,
         heading,
         speed,
-        updated_at: new Date().toISOString(),
       });
 
       if (error) console.warn("Supabase upsert error:", error.message);
@@ -410,7 +284,7 @@ export default function MapScreen() {
           if (cancelled) return;
 
           const uid =
-            myUserId ?? (await supabase.auth.getUser()).data.user?.id ?? null;
+            myUserId ?? (await getCurrentAuthUser())?.id ?? null;
           if (uid) {
             setMyLiveLocation({
               user_id: uid,
@@ -894,41 +768,7 @@ export default function MapScreen() {
         { data: friendshipData, error: friendshipError },
         { data: outgoingRequestData, error: outgoingRequestError },
         { data: incomingRequestData, error: incomingRequestError },
-      ] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select(
-            "id, username, display_name, photo_url, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle, profile_visibility, location_visibility"
-          )
-          .eq("id", userId)
-          .maybeSingle<Profile>(),
-        supabase
-          .from("cars")
-          .select("id, user_id, make, model, year, trim, color, description, photo_url, is_primary")
-          .eq("user_id", userId)
-          .order("is_primary", { ascending: false })
-          .order("year", { ascending: false }),
-        supabase
-          .from("friendships")
-          .select("id")
-          .eq("status", "accepted")
-          .or(`and(user_id.eq.${myUserId},friend_id.eq.${userId}),and(user_id.eq.${userId},friend_id.eq.${myUserId})`)
-          .maybeSingle(),
-        supabase
-          .from("friend_requests")
-          .select("id")
-          .eq("from_user_id", myUserId)
-          .eq("to_user_id", userId)
-          .eq("status", "pending")
-          .maybeSingle(),
-        supabase
-          .from("friend_requests")
-          .select("id")
-          .eq("from_user_id", userId)
-          .eq("to_user_id", myUserId)
-          .eq("status", "pending")
-          .maybeSingle(),
-      ]);
+      ] = await fetchUserMarkerCardData(userId, myUserId);
 
       if (profileErrorRaw) {
         setProfileError(profileErrorRaw.message);
@@ -1022,12 +862,7 @@ export default function MapScreen() {
 
     try {
       setSendingRequest(true);
-      const { error } = await supabase.from("friend_requests").insert({
-        from_user_id: myUserId,
-        to_user_id: selectedUserId,
-        status: "pending",
-        created_at: new Date().toISOString(),
-      });
+      const { error } = await insertFriendRequest(myUserId, selectedUserId);
 
       if (error) {
         setProfileError(error.message);
