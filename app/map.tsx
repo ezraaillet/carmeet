@@ -1,4 +1,5 @@
 import * as Location from "expo-location";
+import * as ExpoLinking from "expo-linking";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -6,7 +7,6 @@ import {
   Alert,
   Easing,
   Image,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -854,6 +854,26 @@ export default function MapScreen() {
     if (!selectedMeetId) return null;
     return meetMarkers.find((meet) => meet.id === selectedMeetId) ?? null;
   }, [selectedMeetId, meetMarkers]);
+  const selectedMeetHasCoordinates = useMemo(() => {
+    if (!selectedMeet) return false;
+    return Number.isFinite(selectedMeet.latitude) && Number.isFinite(selectedMeet.longitude);
+  }, [selectedMeet]);
+
+  const handleGetDirections = useCallback(async () => {
+    if (!selectedMeetHasCoordinates || !selectedMeet) return;
+
+    const destination = `${selectedMeet.latitude},${selectedMeet.longitude}`;
+    const directionsUrl = `http://maps.apple.com/?daddr=${encodeURIComponent(destination)}`;
+
+    if (selectedMeet.title) {
+      const labeledDestination = `${selectedMeet.title}@${destination}`;
+      const labeledDirectionsUrl = `http://maps.apple.com/?daddr=${encodeURIComponent(labeledDestination)}`;
+      await ExpoLinking.openURL(labeledDirectionsUrl);
+      return;
+    }
+
+    await ExpoLinking.openURL(directionsUrl);
+  }, [selectedMeet, selectedMeetHasCoordinates]);
 
   const handleMarkerPress = useCallback(
     async (userId: string) => {
@@ -1278,6 +1298,14 @@ export default function MapScreen() {
               <Text style={styles.meetDescriptionText} numberOfLines={3}>
                 {selectedMeet.description}
               </Text>
+            ) : null}
+
+            {selectedMeetHasCoordinates ? (
+              <Pressable style={styles.getDirectionsBtn} onPress={handleGetDirections}>
+                <Text style={styles.getDirectionsBtnText}>
+                  {selectedMeet.title ? `Get Directions to ${selectedMeet.title}` : "Get Directions"}
+                </Text>
+              </Pressable>
             ) : null}
 
           </View>
