@@ -21,6 +21,7 @@ import { useRouter } from "expo-router";
 import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
 
 type HomeTab = "friends" | "meets";
+type MeetListScope = "all" | "mine";
 type AuthMode = "signin" | "signup" | null;
 type FriendProfile = NonNullable<ReturnType<typeof useFriendProfiles>[number]>;
 type MembershipRow = {
@@ -88,7 +89,31 @@ function formatMeetWhen(startTime?: string | null, endTime?: string | null) {
   return `${startLabel} → ${endLabel}`;
 }
 
-function formatMeetStatus(status?: string | null) {
+function resolveMeetDisplayStatus(
+  status?: string | null,
+  startTime?: string | null,
+  endTime?: string | null,
+  nowMs = Date.now()
+) {
+  const normalizedStatus = (status ?? "").toLowerCase();
+
+  if (normalizedStatus === "cancelled") return "Cancelled";
+  if (normalizedStatus === "completed") return "Completed";
+
+  const startMs = startTime ? new Date(startTime).getTime() : Number.NaN;
+  const endMs = endTime ? new Date(endTime).getTime() : Number.NaN;
+  const comparisonMs = Number.isFinite(endMs) ? endMs : startMs;
+
+  if (Number.isFinite(comparisonMs) && comparisonMs < nowMs) return "Past";
+
+  if (normalizedStatus === "upcoming" || !normalizedStatus) return "Upcoming";
+
+  return normalizedStatus
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatStatusLabel(status?: string | null) {
   if (!status) return "Planned";
   return status
     .replace(/[_-]/g, " ")
@@ -182,6 +207,7 @@ export default function Home() {
   const [updatingAttendanceMeetId, setUpdatingAttendanceMeetId] = useState<string | null>(null);
   const [meetSearchTitleInput, setMeetSearchTitleInput] = useState("");
   const [meetSearchDateInput, setMeetSearchDateInput] = useState<string | null>(null);
+  const [meetListScope, setMeetListScope] = useState<MeetListScope>("all");
   const [membership, setMembership] = useState<MembershipRow | null>(null);
 
   const meetDateOptions = useMemo(() => {
@@ -258,8 +284,8 @@ export default function Home() {
     const normalizedTitle = meetSearchTitleInput.trim().toLowerCase();
 
     return meetCards.filter((meet) => {
-      const normalizedStatus = (meet.status ?? "").toLowerCase();
-      if (normalizedStatus === "cancelled") return false;
+      const meetsScopeFilter =
+        meetListScope === "mine" ? Boolean(myUserId) && meet.created_by === myUserId : true;
 
       const meetsTitleFilter = normalizedTitle
         ? (meet.title ?? "").toLowerCase().includes(normalizedTitle)
@@ -277,9 +303,9 @@ export default function Home() {
           })()
         : true;
 
-      return meetsTitleFilter && meetsDateFilter;
+      return meetsScopeFilter && meetsTitleFilter && meetsDateFilter;
     });
-  }, [meetCards, meetSearchDateInput, meetSearchTitleInput]);
+  }, [meetCards, meetListScope, meetSearchDateInput, meetSearchTitleInput, myUserId]);
 
   const hasMeetFilters = Boolean(meetSearchTitleInput.trim() || meetSearchDateInput);
 
@@ -958,7 +984,9 @@ export default function Home() {
                         <Text style={styles.friendsTitle}>Upcoming meets</Text>
                         <Text style={styles.friendsSubtitle}>
                           {filteredMeetCards.length === 0
-                            ? "No meets yet. Create one to get your crew together."
+                            ? meetListScope === "mine"
+                              ? "You haven’t created any meets yet."
+                              : "No meets yet. Create one to get your crew together."
                             : `${filteredMeetCards.length} meet${filteredMeetCards.length === 1 ? "" : "s"} available.`}
                         </Text>
                       </View>
@@ -987,6 +1015,36 @@ export default function Home() {
                     </View>
 
                     <View style={styles.meetsSearchWrap}>
+                      <View style={styles.meetsFilterChipRow}>
+                        {[
+                          { label: "All Meets", value: "all" as const },
+                          { label: "My Meets", value: "mine" as const },
+                        ].map((option) => {
+                          const selected = meetListScope === option.value;
+
+                          return (
+                            <Pressable
+                              key={`scope-${option.value}`}
+                              onPress={() => setMeetListScope(option.value)}
+                              style={({ pressed }) => [
+                                styles.createMeetChip,
+                                selected && styles.createMeetChipSelected,
+                                pressed && styles.createMeetChipPressed,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.createMeetChipText,
+                                  selected && styles.createMeetChipTextSelected,
+                                ]}
+                              >
+                                {option.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+
                       <TextInput
                         placeholder="Search by meet title"
                         placeholderTextColor="#8892A6"
@@ -1055,9 +1113,11 @@ export default function Home() {
                       <View style={styles.friendsEmptyState}>
                         <Text style={styles.friendsEmptyTitle}>No meets found</Text>
                         <Text style={styles.homeTabContentText}>
-                          {hasMeetFilters
-                            ? "Try a different title or date filter."
-                            : "Public meets and your joined meets will appear here."}
+                          {meetListScope === "mine" && !hasMeetFilters
+                            ? "You haven’t created any meets yet. Tap Create Meet to host one."
+                            : hasMeetFilters
+                              ? "Try a different title or date filter."
+                              : "Public meets and your joined meets will appear here."}
                         </Text>
                       </View>
                     ) : (
@@ -1079,7 +1139,7 @@ export default function Home() {
                                 {meet.title || "Untitled meet"}
                               </Text>
                               <Text style={styles.meetStatus}>
-                                {formatMeetStatus(meet.status)}
+                                {resolveMeetDisplayStatus(meet.status, meet.start_time, meet.end_time)}
                               </Text>
                             </View>
 
@@ -1110,7 +1170,7 @@ export default function Home() {
 
                             {meet.attendance && (
                               <Text style={styles.meetAttendanceText}>
-                                Your status: {formatMeetStatus(meet.attendance)}
+                                Your status: {formatStatusLabel(meet.attendance)}
                               </Text>
                             )}
 
