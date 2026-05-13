@@ -666,6 +666,24 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 4,
   },
+  meetViewOnMapButton: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryDark,
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    marginTop: 2,
+  },
+  meetViewOnMapButtonPressed: {
+    opacity: 0.8,
+  },
+  meetViewOnMapButtonText: {
+    color: colors.offwhite,
+    fontSize: 12,
+    fontWeight: "700",
+  },
   meetAttendanceButton: {
     borderWidth: 1,
     borderColor: colors.steel,
