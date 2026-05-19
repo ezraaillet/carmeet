@@ -1,6 +1,5 @@
-import * as Location from "expo-location";
 import * as ExpoLinking from "expo-linking";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as Location from "expo-location";
 
 import {
   ActivityIndicator,
@@ -15,6 +14,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { Car, FriendRelationshipState, LiveLoc, Profile } from "@/features/map/mapTypes";
 import MapView, {
   AnimatedRegion,
   Marker,
@@ -22,14 +22,7 @@ import MapView, {
   PROVIDER_GOOGLE,
   Region,
 } from "react-native-maps";
-
-import styles from "@/styles/mapstyles";
-import { colors } from "@/styles/themes";
-import { supabase } from "../database/supabase";
-import { useFocusEffect } from "@react-navigation/native";
-import { useMapData } from "@/components/MapDataProvider";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   distanceBetweenCoordsMeters,
   distanceInMeters,
@@ -38,13 +31,20 @@ import {
   formatMeetWhen,
   isFresh,
 } from "@/features/map/mapHelpers";
+import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
 import {
   fetchUserMarkerCardData,
   getCurrentAuthUser,
   insertFriendRequest,
   upsertLocation,
 } from "@/features/map/mapService";
-import { Car, FriendRelationshipState, LiveLoc, Profile } from "@/features/map/mapTypes";
+import { useLocalSearchParams, useRouter } from "expo-router";
+
+import { colors } from "@/styles/themes";
+import styles from "@/styles/mapstyles";
+import { supabase } from "../database/supabase";
+import { useFocusEffect } from "@react-navigation/native";
+import { useMapData } from "@/components/MapDataProvider";
 
 const MARKER_JITTER_THRESHOLD_METERS = 2;
 const MARKER_SNAP_THRESHOLD_METERS = 350;
@@ -1220,7 +1220,7 @@ export default function MapScreen() {
                   {socialEntries.map((social) => (
                     <Pressable
                       key={social.key}
-                      onPress={() => Linking.openURL(social.url)}
+                      onPress={() => ExpoLinking.openURL(social.url)}
                       style={({ pressed }) => [styles.socialPill, pressed && { opacity: 0.85 }]}
                     >
                       <Text style={styles.socialPillText}>{social.label}</Text>
