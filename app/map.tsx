@@ -11,6 +11,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -170,6 +171,7 @@ export default function MapScreen() {
     useState<FriendRelationshipState>("none");
 
   const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
+  const [meetSearchQuery, setMeetSearchQuery] = useState("");
   const [focusedClusterKey, setFocusedClusterKey] = useState<string | null>(null);
   const animatedUserCoordsRef = useRef<Record<string, AnimatedRegion>>({});
   const markerRefs = useRef<Record<string, any>>({});
@@ -732,6 +734,15 @@ export default function MapScreen() {
     if (!selectedMeet) return false;
     return Number.isFinite(selectedMeet.latitude) && Number.isFinite(selectedMeet.longitude);
   }, [selectedMeet]);
+  const filteredMeetMarkers = useMemo(() => {
+    const normalized = meetSearchQuery.trim().toLowerCase();
+    if (!normalized) return meetMarkers;
+    return meetMarkers.filter((meet) => {
+      const title = (meet.title ?? "").toLowerCase();
+      const location = (meet.location_name ?? meet.address ?? "").toLowerCase();
+      return title.includes(normalized) || location.includes(normalized);
+    });
+  }, [meetMarkers, meetSearchQuery]);
 
   const handleGetDirections = useCallback(async () => {
     if (!selectedMeetHasCoordinates || !selectedMeet) return;
@@ -1106,6 +1117,55 @@ export default function MapScreen() {
           </View>
         </View>
       )}
+
+      <View style={styles.meetsSheetContainer}>
+        <View style={styles.meetsSheet}>
+          <TextInput
+            value={meetSearchQuery}
+            onChangeText={setMeetSearchQuery}
+            placeholder="Search upcoming meets"
+            placeholderTextColor="#8a8a8a"
+            style={styles.meetsSearchInput}
+          />
+          <ScrollView
+            style={styles.meetsListScroll}
+            contentContainerStyle={styles.meetsListContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {filteredMeetMarkers.map((meet) => {
+              const when = formatMeetWhen(meet.start_time, meet.end_time);
+              const day = meet.start_time ? new Date(meet.start_time) : null;
+              const dateTop = day && Number.isFinite(day.getTime()) ? String(day.getDate()).padStart(2, "0") : "--";
+              const dateBottom = day && Number.isFinite(day.getTime()) ? day.toLocaleString(undefined, { month: "short" }) : "TBD";
+              return (
+                <Pressable
+                  key={`sheet-meet-${meet.id}`}
+                  onPress={() => {
+                    setSelectedMeetId(meet.id);
+                    mapRef.current?.animateCamera({
+                      center: { latitude: meet.latitude, longitude: meet.longitude },
+                      zoom: 14,
+                    });
+                  }}
+                  style={({ pressed }) => [styles.meetRowCard, pressed && { opacity: 0.88 }]}
+                >
+                  <View style={styles.meetDateBlock}>
+                    <Text style={styles.meetDateDay}>{dateTop}</Text>
+                    <Text style={styles.meetDateMonth}>{dateBottom}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text numberOfLines={2} style={styles.meetRowTitle}>{meet.title || "Meet"}</Text>
+                    <Text numberOfLines={1} style={styles.meetRowMeta}>{when}</Text>
+                    <Text numberOfLines={1} style={styles.meetRowMeta}>
+                      {meet.location_name || meet.address || "Location TBD"} · {meetAttendeeSummaryByMeetId[meet.id]?.going ?? 0} going
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </View>
 
       {selectedMeet && (
         <View style={styles.cardContainer}>

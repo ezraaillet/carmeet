@@ -292,6 +292,71 @@ const mapStyles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 3,
   },
+  meetsSheetContainer: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 6,
+  },
+  meetsSheet: {
+    backgroundColor: "rgba(8,8,8,0.98)",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    padding: 10,
+    maxHeight: 280,
+  },
+  meetsSearchInput: {
+    backgroundColor: "#121212",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    color: "#fff",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+    fontSize: 14,
+  },
+  meetsListScroll: {
+    flexGrow: 0,
+  },
+  meetsListContent: {
+    gap: 8,
+    paddingBottom: 2,
+  },
+  meetRowCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  meetDateBlock: {
+    width: 44,
+    alignItems: "center",
+  },
+  meetDateDay: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 20,
+    lineHeight: 20,
+  },
+  meetDateMonth: {
+    color: "#bcbcbc",
+    fontSize: 12,
+    textTransform: "uppercase",
+  },
+  meetRowTitle: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  meetRowMeta: {
+    color: "#a9a9a9",
+    fontSize: 12,
+    marginTop: 2,
+  },
 });
 
 export default mapStyles;
