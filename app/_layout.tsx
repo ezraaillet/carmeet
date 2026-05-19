@@ -1,6 +1,6 @@
 import { MapDataProvider, useMapData } from "@/components/MapDataProvider";
 import { Pressable, Text, View } from "react-native";
-import { Tabs, useRouter } from "expo-router";
+import { Tabs } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -20,9 +20,7 @@ export type FriendRequest = {
 
 function RootLayoutInner() {
   const { refresh } = useMapData();
-  const router = useRouter();
 
-  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
 
   const [authedEmail, setAuthedEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
@@ -57,7 +55,6 @@ function RootLayoutInner() {
         await ensureProfileAndMembership(user.id, user.email ?? null);
       }
 
-      setCheckingAuth(false);
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -69,7 +66,6 @@ function RootLayoutInner() {
         void ensureProfileAndMembership(user.id, user.email ?? null);
       }
 
-      setCheckingAuth(false);
     });
 
     return () => sub.subscription.unsubscribe();
@@ -148,8 +144,6 @@ function RootLayoutInner() {
   }, [userId, fetchPendingRequests]);
 
 
-  const canAccessMap = !!userId && !checkingAuth;
-
   function openNotifications() {
     if (!userId) return;
     setNotifOpen(true);
@@ -225,6 +219,7 @@ function RootLayoutInner() {
 
       <View style={{ flex: 1, backgroundColor: colors.black }}>
         <Tabs
+          initialRouteName="map"
           screenOptions={({ route }) => ({
             headerShown: false,
             tabBarActiveTintColor: colors.primary,
@@ -239,40 +234,23 @@ function RootLayoutInner() {
             },
             tabBarIcon: ({ color, size }) => {
               const name =
-                route.name === "index"
-                  ? "home"
-                  : route.name === "map"
+                route.name === "map"
                   ? "map"
+                  : route.name === "index"
+                  ? "add-circle"
                   : "person";
               return <Ionicons name={name as any} size={size} color={color} />;
             },
           })}
         >
+          <Tabs.Screen name="map" options={{ title: "Map", tabBarLabel: "Map" }} />
           <Tabs.Screen
             name="index"
-            options={{ title: "Home", tabBarLabel: "Home" }}
-          />
-
-          <Tabs.Screen
-            name="map"
             options={{
-              title: "Map",
-              tabBarLabel: "Map",
-              tabBarIcon: ({ color, size }) => (
-                <Ionicons
-                  name="map"
-                  size={size}
-                  color={canAccessMap ? color : colors.gunmetal}
-                />
-              ),
-            }}
-            listeners={{
-              tabPress: (e) => {
-                if (!userId) {
-                  e.preventDefault();
-                  router.push("/");
-                }
-              },
+              title: "Create",
+              tabBarLabel: "Create",
+              tabBarItemStyle: { marginTop: -6 },
+              tabBarIconStyle: { marginBottom: -2 },
             }}
           />
 
