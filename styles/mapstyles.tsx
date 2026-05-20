@@ -296,7 +296,7 @@ const mapStyles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 62,
+    bottom: 0,
   },
   meetsSheet: {
     backgroundColor: "rgba(8,8,8,0.98)",
