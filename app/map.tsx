@@ -4,8 +4,10 @@ import * as Location from "expo-location";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Easing,
   Image,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -134,6 +136,10 @@ export default function MapScreen() {
   const mapRef = useRef<MapView | null>(null);
   const { height: screenHeight } = useWindowDimensions();
   const profileCardMaxHeight = Math.min(screenHeight * 0.78, 640);
+  const collapsedSheetHeight = Math.round(screenHeight * 0.33);
+  const expandedSheetHeight = Math.round(screenHeight * 0.76);
+  const sheetHeightAnim = useRef(new Animated.Value(collapsedSheetHeight)).current;
+  const sheetDragStartHeightRef = useRef(collapsedSheetHeight);
 
   const {
     profilesById,
@@ -744,6 +750,58 @@ export default function MapScreen() {
     });
   }, [meetMarkers, meetSearchQuery]);
 
+  useEffect(() => {
+    sheetHeightAnim.setValue(collapsedSheetHeight);
+    sheetDragStartHeightRef.current = collapsedSheetHeight;
+  }, [collapsedSheetHeight, sheetHeightAnim]);
+
+  const animateSheetTo = useCallback(
+    (nextHeight: number) => {
+      Animated.spring(sheetHeightAnim, {
+        toValue: Math.max(collapsedSheetHeight, Math.min(expandedSheetHeight, nextHeight)),
+        useNativeDriver: false,
+        bounciness: 0,
+        speed: 18,
+      }).start(({ finished }) => {
+        if (finished) {
+          sheetHeightAnim.stopAnimation((value) => {
+            sheetDragStartHeightRef.current = value;
+          });
+        }
+      });
+    },
+    [collapsedSheetHeight, expandedSheetHeight, sheetHeightAnim]
+  );
+
+  const meetsSheetPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_evt, gestureState) =>
+          Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 4,
+        onPanResponderGrant: () => {
+          sheetHeightAnim.stopAnimation((value) => {
+            sheetDragStartHeightRef.current = value;
+          });
+        },
+        onPanResponderMove: (_evt, gestureState) => {
+          const nextHeight = sheetDragStartHeightRef.current - gestureState.dy;
+          sheetHeightAnim.setValue(
+            Math.max(collapsedSheetHeight, Math.min(expandedSheetHeight, nextHeight))
+          );
+        },
+        onPanResponderRelease: (_evt, gestureState) => {
+          const draggedHeight = sheetDragStartHeightRef.current - gestureState.dy;
+          const velocityAdjustedHeight = draggedHeight - gestureState.vy * 120;
+          const midpoint = (collapsedSheetHeight + expandedSheetHeight) / 2;
+          animateSheetTo(velocityAdjustedHeight > midpoint ? expandedSheetHeight : collapsedSheetHeight);
+        },
+        onPanResponderTerminate: () => {
+          animateSheetTo(collapsedSheetHeight);
+        },
+      }),
+    [animateSheetTo, collapsedSheetHeight, expandedSheetHeight, sheetHeightAnim]
+  );
+
   const handleGetDirections = useCallback(async () => {
     if (!selectedMeetHasCoordinates || !selectedMeet) return;
 
@@ -1118,8 +1176,11 @@ export default function MapScreen() {
         </View>
       )}
 
-      <View style={styles.meetsSheetContainer}>
-        <View style={styles.meetsSheet}>
+      <Animated.View style={[styles.meetsSheetContainer, { height: sheetHeightAnim }]}>
+        <View style={styles.meetsSheet} {...meetsSheetPanResponder.panHandlers}>
+          <View style={styles.meetsSheetHandleWrap}>
+            <View style={styles.meetsSheetHandle} />
+          </View>
           <TextInput
             value={meetSearchQuery}
             onChangeText={setMeetSearchQuery}
@@ -1165,7 +1226,7 @@ export default function MapScreen() {
             })}
           </ScrollView>
         </View>
-      </View>
+      </Animated.View>
 
       {selectedMeet && (
         <View style={styles.cardContainer}>
