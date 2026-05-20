@@ -249,8 +249,6 @@ function RootLayoutInner() {
             options={{
               title: "Create",
               tabBarLabel: "Create",
-              tabBarItemStyle: { marginTop: -6 },
-              tabBarIconStyle: { marginBottom: -2 },
             }}
           />
 
