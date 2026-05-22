@@ -1188,6 +1188,9 @@ export default function MapScreen() {
             placeholderTextColor="#8a8a8a"
             style={styles.meetsSearchInput}
           />
+          <View pointerEvents="none" style={styles.meetsSearchIconWrap}>
+            <Text style={styles.meetsSearchIcon}>⌕</Text>
+          </View>
           <ScrollView
             style={styles.meetsListScroll}
             contentContainerStyle={styles.meetsListContent}
@@ -1198,6 +1201,8 @@ export default function MapScreen() {
               const day = meet.start_time ? new Date(meet.start_time) : null;
               const dateTop = day && Number.isFinite(day.getTime()) ? String(day.getDate()).padStart(2, "0") : "--";
               const dateBottom = day && Number.isFinite(day.getTime()) ? day.toLocaleString(undefined, { month: "short" }) : "TBD";
+              const goingCount = meetAttendeeSummaryByMeetId[meet.id]?.going ?? 0;
+              const interestedCount = meetAttendeeSummaryByMeetId[meet.id]?.interested ?? 0;
               return (
                 <Pressable
                   key={`sheet-meet-${meet.id}`}
@@ -1210,15 +1215,25 @@ export default function MapScreen() {
                   }}
                   style={({ pressed }) => [styles.meetRowCard, pressed && { opacity: 0.88 }]}
                 >
-                  <View style={styles.meetDateBlock}>
-                    <Text style={styles.meetDateDay}>{dateTop}</Text>
-                    <Text style={styles.meetDateMonth}>{dateBottom}</Text>
+                  <View style={styles.meetLeftColumn}>
+                    <View style={styles.meetDateBlock}>
+                      <Text style={styles.meetDateDay}>{dateTop}</Text>
+                      <Text style={styles.meetDateMonth}>{dateBottom}</Text>
+                    </View>
+                    <Text numberOfLines={1} style={styles.meetDateTime}>{when}</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
+                  <View style={styles.meetRightColumn}>
                     <Text numberOfLines={2} style={styles.meetRowTitle}>{meet.title || "Meet"}</Text>
-                    <Text numberOfLines={1} style={styles.meetRowMeta}>{when}</Text>
                     <Text numberOfLines={1} style={styles.meetRowMeta}>
-                      {meet.location_name || meet.address || "Location TBD"} · {meetAttendeeSummaryByMeetId[meet.id]?.going ?? 0} going
+                      {meet.location_name || meet.address || "Location TBD"}
+                    </Text>
+                    <View style={styles.meetActionsRow}>
+                      <Text style={styles.meetActionText}>✓ {goingCount}</Text>
+                      <Text style={styles.meetActionDot}>◦</Text>
+                      <Text style={styles.meetActionText}>◔ {interestedCount}</Text>
+                    </View>
+                    <Text numberOfLines={1} style={styles.meetRowStatusText}>
+                      {formatMeetStatus(meet.status)}
                     </Text>
                   </View>
                 </Pressable>
