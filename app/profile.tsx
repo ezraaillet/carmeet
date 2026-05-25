@@ -19,7 +19,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import s from "@/styles/profilestyles";
 import { supabase } from "../database/supabase";
 import { useMapData } from "@/components/MapDataProvider";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   ensureMinimalProfileExists,
@@ -84,7 +84,6 @@ const ACCENT_COLOR_PRESETS = [
 ];
 
 export default function ProfileScreen() {
-  const router = useRouter();
   const params = useLocalSearchParams<{ onboarding?: string }>();
 
   const {
@@ -137,7 +136,6 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [loadingLocal, setLoadingLocal] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const initials = useMemo(() => {
@@ -572,19 +570,6 @@ export default function ProfileScreen() {
     setSaving(false);
   }
 
-  // -----------------------------
-  // Sign out
-  // -----------------------------
-  async function handleSignOut() {
-    try {
-      setSigningOut(true);
-      await supabase.auth.signOut();
-      setProfile(null);
-      router.replace("/");
-    } finally {
-      setSigningOut(false);
-    }
-  }
 
   function resetAddCarForm() {
     setCarYear("");
@@ -971,17 +956,24 @@ export default function ProfileScreen() {
         ) : (
           cars.map((car) => (
             <View key={car.id} style={s.carCard}>
-              {car.photo_url ? (
-                <Image source={{ uri: car.photo_url }} style={s.carImage} />
-              ) : null}
-
-              <View style={s.carContent}>
-                <Text style={s.carTitle}>
+              <View style={s.carImageWrap}>
+                {car.photo_url ? (
+                  <Image source={{ uri: car.photo_url }} style={s.carImage} />
+                ) : (
+                  <View style={s.carImagePlaceholder}>
+                    <Text style={s.carPlaceholderText}>No photo</Text>
+                  </View>
+                )}
+                <View style={s.carImageOverlay} />
+                <Text style={s.carImageTitle}>
                   {[car.year, car.make, car.model]
                     .filter(Boolean)
                     .join(" ")
                     .trim() || "Untitled car"}
                 </Text>
+              </View>
+
+              <View style={s.carContent}>
                 {car.is_primary ? <Text style={s.carMeta}>Primary car</Text> : null}
                 {car.color ? (
                   <Text style={s.carMeta}>Color: {car.color}</Text>
@@ -995,7 +987,7 @@ export default function ProfileScreen() {
                 <View style={s.carActionsRow}>
                 <Pressable
                   onPress={() => beginEditCar(car)}
-                  style={[s.secondaryBtn, s.carActionBtn]}
+                  style={[s.carActionBtn, s.carActionBtnSecondary]}
                 >
                   <Text style={s.secondaryBtnText}>Edit</Text>
                 </Pressable>
@@ -1018,8 +1010,8 @@ export default function ProfileScreen() {
                   }
                   disabled={deletingCarId === car.id}
                   style={[
-                    s.secondaryBtn,
                     s.carActionBtn,
+                    s.carActionBtnSecondary,
                     deletingCarId === car.id && { opacity: 0.7 },
                   ]}
                 >
@@ -1313,14 +1305,19 @@ export default function ProfileScreen() {
         overScrollMode="never"
         bounces={false}
       >
-        <Image
-          source={{
-            uri:
-              bannerUrl ||
-              "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1400&q=80",
-          }}
-          style={s.bannerImage}
-        />
+        <View style={s.bannerWrap}>
+          <Image
+            source={{
+              uri:
+                bannerUrl ||
+                "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1400&q=80",
+            }}
+            style={s.bannerImage}
+          />
+          <View style={s.bannerOverlayDark} />
+          <View style={s.bannerOverlayFadeStrong} />
+          <View style={s.bannerOverlayFadeSoft} />
+        </View>
         <View
           style={[
             s.avatarWrap,
@@ -1371,28 +1368,6 @@ export default function ProfileScreen() {
           ) : null}
         </View>
 
-        <View style={s.headerActions}>
-          <Pressable
-            onPress={() => {
-              setEditing(true);
-            }}
-            style={s.primaryBtn}
-          >
-            <Text style={s.primaryBtnText}>Edit Profile</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={handleSignOut}
-            disabled={signingOut}
-            style={[s.secondaryBtn, signingOut && { opacity: 0.7 }]}
-          >
-            {signingOut ? (
-              <ActivityIndicator />
-            ) : (
-              <Text style={s.secondaryBtnText}>Sign Out</Text>
-            )}
-          </Pressable>
-        </View>
 
         <View style={s.tabRow}>
           {renderTabButton("Cars", "cars")}
