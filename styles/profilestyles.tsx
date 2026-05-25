@@ -15,7 +15,6 @@ const profileStyles = StyleSheet.create({
   // Main container
   container: {
     flexGrow: 1,
-    padding: 20,
     paddingBottom: 40,
     backgroundColor: colors.black,
   },
@@ -30,9 +29,11 @@ const profileStyles = StyleSheet.create({
 
   // Avatar wrapper
   avatarWrap: {
-    alignSelf: "center",
+    alignSelf: "flex-start",
     alignItems: "center",
     marginBottom: 12,
+    marginLeft: 16,
+    marginTop: -48,
     borderWidth: 3,
     borderRadius: 999,
     padding: 4,
@@ -75,8 +76,9 @@ const profileStyles = StyleSheet.create({
   },
 
   headerTextWrap: {
-    alignItems: "center",
+    alignItems: "flex-start",
     marginBottom: 14,
+    paddingHorizontal: 16,
   },
 
   displayNameText: {
@@ -117,7 +119,6 @@ const profileStyles = StyleSheet.create({
   bioText: {
     marginTop: 10,
     color: colors.offwhite,
-    textAlign: "center",
   },
 
   socialIconsRow: {
@@ -145,7 +146,7 @@ const profileStyles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 14,
     flexDirection: "row",
-    alignSelf: "center",
+    paddingHorizontal: 16,
     gap: 12,
   },
 
@@ -210,23 +211,21 @@ const profileStyles = StyleSheet.create({
 
   tabRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
     marginBottom: 14,
+    paddingHorizontal: 16,
   },
 
   tabButton: {
-    borderWidth: 1,
-    borderColor: colors.steel,
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: colors.charcoal,
+    flex: 1,
+    borderBottomWidth: 2,
+    borderColor: "transparent",
+    paddingVertical: 10,
+    alignItems: "center",
   },
 
   tabButtonActive: {
     borderColor: colors.primary,
-    backgroundColor: colors.primary,
   },
 
   tabButtonText: {
@@ -236,14 +235,13 @@ const profileStyles = StyleSheet.create({
   },
 
   tabButtonTextActive: {
-    color: "#fff",
+    color: colors.primary,
   },
 
   sectionCard: {
-    borderWidth: 1,
-    borderColor: colors.gunmetal,
     borderRadius: 12,
     padding: 14,
+    marginHorizontal: 12,
     backgroundColor: colors.charcoal,
   },
 
@@ -304,19 +302,15 @@ const profileStyles = StyleSheet.create({
   },
 
   carCard: {
-    borderWidth: 1,
-    borderColor: colors.gunmetal,
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 10,
+    borderRadius: 12,
+    overflow: "hidden",
+    marginTop: 12,
     backgroundColor: colors.black,
   },
 
   carImage: {
     width: "100%",
-    height: 170,
-    borderRadius: 8,
-    marginBottom: 10,
+    height: 190,
     backgroundColor: colors.charcoal,
   },
 
@@ -330,13 +324,34 @@ const profileStyles = StyleSheet.create({
 
   carTitle: {
     color: colors.offwhite,
-    fontSize: 16,
+    fontSize: 24,
     fontWeight: "700",
     marginBottom: 4,
   },
 
   carMeta: {
     color: colors.silver,
+    marginBottom: 4,
+  },
+
+  carContent: {
+    padding: 12,
+  },
+
+  meetCard: {
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 10,
+    backgroundColor: colors.black,
+  },
+
+  bannerImage: {
+    width: "100%",
+    height: 180,
+    backgroundColor: colors.charcoal,
+    marginBottom: 8,
   },
 
   carActionsRow: {

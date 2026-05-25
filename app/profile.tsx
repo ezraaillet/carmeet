@@ -39,11 +39,12 @@ type ProfileRow = {
   tiktok_handle?: string | null;
   twitter_handle?: string | null;
   snapchat_handle?: string | null;
+  banner_url?: string | null;
   created_at?: string;
   onboarded?: boolean | null;
 };
 
-type ProfileTab = "about" | "cars" | "membership" | "settings";
+type ProfileTab = "cars" | "meets";
 
 type CarRow = {
   id: string;
@@ -107,7 +108,8 @@ export default function ProfileScreen() {
   const [snapchatHandle, setSnapchatHandle] = useState("");
   const [city, setCity] = useState<string | null>(null);
   const [state, setState] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<ProfileTab>("about");
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ProfileTab>("cars");
   const [cars, setCars] = useState<CarRow[]>([]);
   const [carsLoading, setCarsLoading] = useState(false);
   const [carsError, setCarsError] = useState<string | null>(null);
@@ -125,11 +127,12 @@ export default function ProfileScreen() {
   const [editingCarId, setEditingCarId] = useState<string | null>(null);
   const [deletingCarId, setDeletingCarId] = useState<string | null>(null);
   const [membership, setMembership] = useState<MembershipRow | null>(null);
-  const [membershipLoading, setMembershipLoading] = useState(false);
-  const [membershipError, setMembershipError] = useState<string | null>(null);
   const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT_COLOR);
   const [customizationLoading, setCustomizationLoading] = useState(false);
   const [customizationSavingColor, setCustomizationSavingColor] = useState<string | null>(null);
+  const [goingMeets, setGoingMeets] = useState<any[]>([]);
+  const [meetsLoading, setMeetsLoading] = useState(false);
+  const [meetsError, setMeetsError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
   const [loadingLocal, setLoadingLocal] = useState(true);
@@ -192,6 +195,7 @@ export default function ProfileScreen() {
           setPhotoUrl(cached.photo_url ?? null);
           setLocationVis(cached.location_visibility ?? "everyone");
           setBio(cached.bio ?? "");
+          setBannerUrl(cached.banner_url ?? null);
           setInstagramHandle(cached.instagram_handle ?? "");
           setTiktokHandle(cached.tiktok_handle ?? "");
           setTwitterHandle(cached.twitter_handle ?? "");
@@ -217,6 +221,7 @@ export default function ProfileScreen() {
         setPhotoUrl(row.photo_url ?? null);
         setLocationVis(row.location_visibility ?? "everyone");
         setBio(row.bio ?? "");
+        setBannerUrl(row.banner_url ?? null);
         setInstagramHandle(row.instagram_handle ?? "");
         setTiktokHandle(row.tiktok_handle ?? "");
         setTwitterHandle(row.twitter_handle ?? "");
@@ -246,7 +251,6 @@ export default function ProfileScreen() {
 
     if (shouldForceEdit) {
       setEditing(true);
-      setActiveTab("settings");
     }
   }, [params.onboarding, profile]);
 
@@ -287,14 +291,36 @@ export default function ProfileScreen() {
     void loadCars();
   }, [activeTab, loadCars]);
 
+  const loadGoingMeets = useCallback(async () => {
+    if (!myUserId) return;
+    setMeetsLoading(true);
+    setMeetsError(null);
+    const { data, error: loadErr } = await supabase
+      .from("meet_attendees")
+      .select("meet_id, meets:meets!meet_attendees_meet_id_fkey(id, title, description, location_name, start_time, status)")
+      .eq("user_id", myUserId)
+      .eq("status", "going")
+      .order("start_time", { ascending: true, foreignTable: "meets" });
+    if (loadErr) {
+      setMeetsError(loadErr.message);
+      setGoingMeets([]);
+      setMeetsLoading(false);
+      return;
+    }
+    setGoingMeets(data ?? []);
+    setMeetsLoading(false);
+  }, [myUserId]);
+
+  useEffect(() => {
+    if (activeTab !== "meets") return;
+    void loadGoingMeets();
+  }, [activeTab, loadGoingMeets]);
+
   const loadMembership = useCallback(async () => {
     if (!myUserId) {
       setMembership(null);
       return;
     }
-
-    setMembershipLoading(true);
-    setMembershipError(null);
 
     try {
       const { data, error: loadErr } = await supabase
@@ -306,11 +332,8 @@ export default function ProfileScreen() {
       if (loadErr) throw loadErr;
 
       setMembership(data ?? null);
-      setMembershipLoading(false);
-    } catch (loadErr: any) {
+    } catch {
       setMembership(null);
-      setMembershipError(loadErr?.message ?? "Failed to load membership.");
-      setMembershipLoading(false);
     }
   }, [myUserId]);
 
@@ -533,6 +556,7 @@ export default function ProfileScreen() {
     // Update local immediately
     setProfile(data);
     setBio(data.bio ?? "");
+    setBannerUrl(data.banner_url ?? null);
     setInstagramHandle(data.instagram_handle ?? "");
     setTiktokHandle(data.tiktok_handle ?? "");
     setTwitterHandle(data.twitter_handle ?? "");
@@ -785,77 +809,6 @@ export default function ProfileScreen() {
     },
   ].filter((social) => Boolean(social.handle));
 
-  function renderAboutSection() {
-    return (
-      <View style={s.sectionCard}>
-        <Text style={s.sectionTitle}>About</Text>
-        <View style={s.field}>
-          <Text style={s.label}>Email</Text>
-          <View style={s.readonlyBox}>
-            <Text style={s.readonlyText}>{email ?? "—"}</Text>
-          </View>
-        </View>
-
-        <View style={s.field}>
-          <Text style={s.label}>Bio</Text>
-          <View style={s.readonlyBox}>
-            <Text style={s.readonlyText}>{bio.trim() || "No bio yet."}</Text>
-          </View>
-        </View>
-
-        <View style={s.field}>
-          <Text style={s.label}>Location visibility</Text>
-          <View style={s.readonlyBox}>
-            <Text style={s.readonlyText}>{locationVis || "everyone"}</Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  function renderMembershipSection() {
-    return (
-      <View style={s.sectionCard}>
-        <Text style={s.sectionTitle}>Membership</Text>
-
-        {membershipError ? <Text style={s.error}>{membershipError}</Text> : null}
-
-        {membershipLoading ? (
-          <View style={s.carsLoadingWrap}>
-            <ActivityIndicator />
-            <Text style={s.placeholderText}>Loading membership…</Text>
-          </View>
-        ) : (
-          <>
-            <View style={s.field}>
-              <Text style={s.label}>Current plan</Text>
-              <View style={s.readonlyBox}>
-                <Text style={s.readonlyText}>{membershipPlan}</Text>
-              </View>
-            </View>
-
-            <View style={s.field}>
-              <Text style={s.label}>Status</Text>
-              <View style={s.readonlyBox}>
-                <Text style={s.readonlyText}>{membershipStatus}</Text>
-              </View>
-            </View>
-
-            {!isPremium ? (
-              <Pressable style={s.primaryBtn}>
-                <Text style={s.primaryBtnText}>Upgrade to Premium</Text>
-              </Pressable>
-            ) : (
-              <Text style={s.placeholderText}>
-                You are on Premium. More membership perks are coming soon.
-              </Text>
-            )}
-          </>
-        )}
-      </View>
-    );
-  }
-
   function renderCarsSection() {
     return (
       <View style={s.sectionCard}>
@@ -1022,25 +975,24 @@ export default function ProfileScreen() {
                 <Image source={{ uri: car.photo_url }} style={s.carImage} />
               ) : null}
 
-              <Text style={s.carTitle}>
-                {[car.year, car.make, car.model]
-                  .filter(Boolean)
-                  .join(" ")
-                  .trim() || "Untitled car"}
-              </Text>
-              {car.color ? (
-                <Text style={s.carMeta}>Color: {car.color}</Text>
-              ) : null}
-              {car.trim ? (
-                <Text style={s.carMeta}>Trim: {car.trim}</Text>
-              ) : null}
-              {car.description ? (
-                <Text style={s.carMeta}>Description: {car.description}</Text>
-              ) : null}
-              <Text style={s.carMeta}>
-                {car.is_primary ? "Primary car" : "Secondary car"}
-              </Text>
-              <View style={s.carActionsRow}>
+              <View style={s.carContent}>
+                <Text style={s.carTitle}>
+                  {[car.year, car.make, car.model]
+                    .filter(Boolean)
+                    .join(" ")
+                    .trim() || "Untitled car"}
+                </Text>
+                {car.is_primary ? <Text style={s.carMeta}>Primary car</Text> : null}
+                {car.color ? (
+                  <Text style={s.carMeta}>Color: {car.color}</Text>
+                ) : null}
+                {car.trim ? (
+                  <Text style={s.carMeta}>Trim: {car.trim}</Text>
+                ) : null}
+                {car.description ? (
+                  <Text style={s.carMeta}>{car.description}</Text>
+                ) : null}
+                <View style={s.carActionsRow}>
                 <Pressable
                   onPress={() => beginEditCar(car)}
                   style={[s.secondaryBtn, s.carActionBtn]}
@@ -1078,6 +1030,35 @@ export default function ProfileScreen() {
                   )}
                 </Pressable>
               </View>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+    );
+  }
+
+
+
+  function renderMeetsSection() {
+    return (
+      <View style={s.sectionCard}>
+        <Text style={s.sectionTitle}>Meets Going</Text>
+        {meetsError ? <Text style={s.error}>{meetsError}</Text> : null}
+        {meetsLoading ? (
+          <View style={s.carsLoadingWrap}>
+            <ActivityIndicator />
+            <Text style={s.placeholderText}>Loading meets…</Text>
+          </View>
+        ) : goingMeets.length === 0 ? (
+          <Text style={s.placeholderText}>You are not marked as going to any meets yet.</Text>
+        ) : (
+          goingMeets.map((entry) => (
+            <View key={entry.meet_id} style={s.meetCard}>
+              <Text style={s.carTitle}>{entry.meets?.title || "Untitled meet"}</Text>
+              {entry.meets?.location_name ? <Text style={s.carMeta}>{entry.meets.location_name}</Text> : null}
+              {entry.meets?.start_time ? <Text style={s.carMeta}>{new Date(entry.meets.start_time).toLocaleString()}</Text> : null}
+              {entry.meets?.description ? <Text style={s.carMeta}>{entry.meets.description}</Text> : null}
             </View>
           ))
         )}
@@ -1332,7 +1313,14 @@ export default function ProfileScreen() {
         overScrollMode="never"
         bounces={false}
       >
-        {/* Profile Header */}
+        <Image
+          source={{
+            uri:
+              bannerUrl ||
+              "https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1400&q=80",
+          }}
+          style={s.bannerImage}
+        />
         <View
           style={[
             s.avatarWrap,
@@ -1387,7 +1375,6 @@ export default function ProfileScreen() {
           <Pressable
             onPress={() => {
               setEditing(true);
-              setActiveTab("settings");
             }}
             style={s.primaryBtn}
           >
@@ -1408,16 +1395,13 @@ export default function ProfileScreen() {
         </View>
 
         <View style={s.tabRow}>
-          {renderTabButton("About", "about")}
           {renderTabButton("Cars", "cars")}
-          {renderTabButton("Membership", "membership")}
-          {renderTabButton("Settings", "settings")}
+          {renderTabButton("Meets", "meets")}
         </View>
 
-        {activeTab === "about" && renderAboutSection()}
         {activeTab === "cars" && renderCarsSection()}
-        {activeTab === "membership" && renderMembershipSection()}
-        {activeTab === "settings" && renderSettingsSection()}
+        {activeTab === "meets" && renderMeetsSection()}
+        {editing ? renderSettingsSection() : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );
