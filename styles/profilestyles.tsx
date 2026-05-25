@@ -142,13 +142,6 @@ const profileStyles = StyleSheet.create({
     fontSize: 13,
   },
 
-  headerActions: {
-    marginTop: 8,
-    marginBottom: 14,
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    gap: 12,
-  },
 
   // Form fields
   field: {
@@ -303,15 +296,51 @@ const profileStyles = StyleSheet.create({
 
   carCard: {
     borderRadius: 12,
-    overflow: "hidden",
     marginTop: 12,
     backgroundColor: colors.black,
   },
 
+  carImageWrap: {
+    borderRadius: 12,
+    overflow: "hidden",
+    position: "relative",
+  },
+
   carImage: {
     width: "100%",
-    height: 190,
+    height: 210,
     backgroundColor: colors.charcoal,
+  },
+
+  carImagePlaceholder: {
+    width: "100%",
+    height: 210,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.charcoal,
+  },
+
+  carPlaceholderText: {
+    color: colors.silver,
+    fontWeight: "600",
+  },
+
+  carImageOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 64,
+    backgroundColor: "rgba(0,0,0,0.52)",
+  },
+
+  carImageTitle: {
+    position: "absolute",
+    left: 12,
+    bottom: 10,
+    color: colors.offwhite,
+    fontSize: 21,
+    fontWeight: "700",
   },
 
   addCarPhotoPreview: {
@@ -335,7 +364,9 @@ const profileStyles = StyleSheet.create({
   },
 
   carContent: {
-    padding: 12,
+    paddingHorizontal: 4,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
 
   meetCard: {
@@ -347,11 +378,45 @@ const profileStyles = StyleSheet.create({
     backgroundColor: colors.black,
   },
 
+  bannerWrap: {
+    width: "100%",
+    height: 136,
+    marginBottom: 8,
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: colors.charcoal,
+  },
+
   bannerImage: {
     width: "100%",
-    height: 180,
-    backgroundColor: colors.charcoal,
-    marginBottom: 8,
+    height: "100%",
+  },
+
+  bannerOverlayDark: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 72,
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+
+  bannerOverlayFadeStrong: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 42,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+
+  bannerOverlayFadeSoft: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 22,
+    backgroundColor: "rgba(0,0,0,0.78)",
   },
 
   carActionsRow: {
@@ -361,8 +426,15 @@ const profileStyles = StyleSheet.create({
   },
 
   carActionBtn: {
-    flex: 1,
-    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+  },
+
+  carActionBtnSecondary: {
+    backgroundColor: "transparent",
   },
 
   primaryBtn: {
