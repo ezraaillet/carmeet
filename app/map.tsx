@@ -58,6 +58,40 @@ const CLUSTER_MIN_SIZE = 4;
 const CLUSTER_MAX_ZOOM_LATITUDE_DELTA = 0.012;
 const DEFAULT_MARKER_BORDER_COLOR = colors.primary;
 
+
+function getMeetRowStatusLabel(
+  status?: string | null,
+  startTime?: string | null,
+  endTime?: string | null,
+  nowMs = Date.now()
+) {
+  const normalizedStatus = (status ?? "").toLowerCase();
+
+  if (normalizedStatus === "cancelled") return "CANCELLED";
+  if (normalizedStatus === "completed") return "COMPLETED";
+
+  const startMs = startTime ? new Date(startTime).getTime() : Number.NaN;
+  const endMs = endTime ? new Date(endTime).getTime() : Number.NaN;
+  const comparisonMs = Number.isFinite(endMs) ? endMs : startMs;
+
+  if (Number.isFinite(comparisonMs) && comparisonMs < nowMs) return "PAST";
+
+  if (normalizedStatus === "upcoming") return "UPCOMING";
+
+  return formatMeetStatus(status).toUpperCase();
+}
+
+function formatMeetRowTime(startTime?: string | null) {
+  if (!startTime) return "TBD";
+  const start = new Date(startTime);
+  if (!Number.isFinite(start.getTime())) return "TBD";
+
+  return start.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 type AnimatedUserMarkerProps = {
   tracksViewChanges?: boolean;
   userId: string;
@@ -1197,10 +1231,11 @@ export default function MapScreen() {
             showsVerticalScrollIndicator={false}
           >
             {filteredMeetMarkers.map((meet) => {
-              const when = formatMeetWhen(meet.start_time, meet.end_time);
               const day = meet.start_time ? new Date(meet.start_time) : null;
               const dateTop = day && Number.isFinite(day.getTime()) ? String(day.getDate()).padStart(2, "0") : "--";
-              const dateBottom = day && Number.isFinite(day.getTime()) ? day.toLocaleString(undefined, { month: "short" }) : "TBD";
+              const dateBottom = day && Number.isFinite(day.getTime()) ? day.toLocaleString(undefined, { month: "short" }).toUpperCase() : "TBD";
+              const meetTime = formatMeetRowTime(meet.start_time);
+              const rowStatus = getMeetRowStatusLabel(meet.status, meet.start_time, meet.end_time);
               const goingCount = meetAttendeeSummaryByMeetId[meet.id]?.going ?? 0;
               const interestedCount = meetAttendeeSummaryByMeetId[meet.id]?.interested ?? 0;
               return (
@@ -1220,7 +1255,7 @@ export default function MapScreen() {
                       <Text style={styles.meetDateDay}>{dateTop}</Text>
                       <Text style={styles.meetDateMonth}>{dateBottom}</Text>
                     </View>
-                    <Text numberOfLines={1} style={styles.meetDateTime}>{when}</Text>
+                    <Text numberOfLines={1} style={styles.meetDateTime}>{meetTime}</Text>
                   </View>
                   <View style={styles.meetRightColumn}>
                     <Text numberOfLines={2} style={styles.meetRowTitle}>{meet.title || "Meet"}</Text>
@@ -1233,7 +1268,7 @@ export default function MapScreen() {
                       <Text style={styles.meetActionText}>◔ {interestedCount}</Text>
                     </View>
                     <Text numberOfLines={1} style={styles.meetRowStatusText}>
-                      {formatMeetStatus(meet.status)}
+                      {rowStatus}
                     </Text>
                   </View>
                 </Pressable>
