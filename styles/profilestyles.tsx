@@ -29,20 +29,16 @@ const profileStyles = StyleSheet.create({
 
   // Avatar wrapper
   avatarWrap: {
-    alignSelf: "flex-start",
     alignItems: "center",
-    marginBottom: 12,
-    marginLeft: 16,
-    marginTop: -48,
     borderWidth: 3,
     borderRadius: 999,
     padding: 4,
   },
 
   avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     backgroundColor: "#eee",
   },
 
@@ -52,7 +48,7 @@ const profileStyles = StyleSheet.create({
   },
 
   avatarInitials: {
-    fontSize: 36,
+    fontSize: 30,
     fontWeight: "700",
     color: colors.gunmetal,
   },
@@ -76,9 +72,22 @@ const profileStyles = StyleSheet.create({
   },
 
   headerTextWrap: {
-    alignItems: "flex-start",
+    alignItems: "stretch",
     marginBottom: 14,
+    marginTop: -42,
     paddingHorizontal: 16,
+  },
+
+  heroIdentityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+
+  identityTextWrap: {
+    flex: 1,
+    alignItems: "flex-start",
+    paddingTop: 8,
   },
 
   displayNameText: {
