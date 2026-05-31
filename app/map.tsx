@@ -168,6 +168,9 @@ export default function MapScreen() {
     return hasMeetId || hasCoordinates;
   }, [params.focusMeetId, params.latitude, params.longitude]);
   const mapRef = useRef<MapView | null>(null);
+  const hasUserMovedMapRef = useRef(false);
+  const isProgrammaticCameraMoveRef = useRef(false);
+  const selectedMeetIdRef = useRef<string | null>(null);
   const { height: screenHeight } = useWindowDimensions();
   const profileCardMaxHeight = Math.min(screenHeight * 0.78, 640);
   const collapsedSheetHeight = Math.round(screenHeight * 0.33);
@@ -212,6 +215,10 @@ export default function MapScreen() {
 
   const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
   const [meetSearchQuery, setMeetSearchQuery] = useState("");
+
+  useEffect(() => {
+    selectedMeetIdRef.current = selectedMeetId;
+  }, [selectedMeetId]);
   const [focusedClusterKey, setFocusedClusterKey] = useState<string | null>(null);
   const animatedUserCoordsRef = useRef<Record<string, AnimatedRegion>>({});
   const markerRefs = useRef<Record<string, any>>({});
@@ -317,44 +324,70 @@ export default function MapScreen() {
       let sub: Location.LocationSubscription | null = null;
       let cancelled = false;
 
+      const applyLocationToMap = async (
+        position: Location.LocationObject,
+        options: { animateIfAllowed: boolean }
+      ) => {
+        if (cancelled) return;
+
+        const uid = myUserId ?? (await getCurrentAuthUser())?.id ?? null;
+        if (cancelled) return;
+
+        if (uid) {
+          setMyLiveLocation({
+            user_id: uid,
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            heading: position.coords.heading ?? undefined,
+            speed: position.coords.speed ?? undefined,
+            updated_at: new Date().toISOString(),
+          });
+        }
+
+        setRegion((r) => ({
+          ...r,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        }));
+
+        const canAnimateToMe =
+          options.animateIfAllowed &&
+          !hasRequestedMeetTarget &&
+          !hasUserMovedMapRef.current &&
+          !selectedMeetIdRef.current;
+
+        if (canAnimateToMe && mapRef.current) {
+          isProgrammaticCameraMoveRef.current = true;
+          mapRef.current.animateCamera({
+            center: {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            },
+            zoom: 15,
+          });
+        }
+
+        setGotFix(true);
+      };
+
       (async () => {
         try {
+          const lastKnown = await Location.getLastKnownPositionAsync();
+          if (lastKnown) {
+            await applyLocationToMap(lastKnown, { animateIfAllowed: true });
+          }
+        } catch (e: any) {
+          console.warn("Last-known location error:", e?.message ?? e);
+        }
+
+        try {
           const current = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.BestForNavigation,
+            accuracy: Location.Accuracy.High,
           });
 
           if (cancelled) return;
 
-          const uid =
-            myUserId ?? (await getCurrentAuthUser())?.id ?? null;
-          if (uid) {
-            setMyLiveLocation({
-              user_id: uid,
-              lat: current.coords.latitude,
-              lng: current.coords.longitude,
-              heading: current.coords.heading ?? undefined,
-              speed: current.coords.speed ?? undefined,
-              updated_at: new Date().toISOString(),
-            });
-          }
-
-          setRegion((r) => ({
-            ...r,
-            latitude: current.coords.latitude,
-            longitude: current.coords.longitude,
-          }));
-
-          if (!hasRequestedMeetTarget) {
-            mapRef.current?.animateCamera({
-              center: {
-                latitude: current.coords.latitude,
-                longitude: current.coords.longitude,
-              },
-              zoom: 15,
-            });
-          }
-
-          setGotFix(true);
+          await applyLocationToMap(current, { animateIfAllowed: true });
 
           await upsertMyLocation(
             current.coords.latitude,
@@ -362,7 +395,13 @@ export default function MapScreen() {
             current.coords.heading ?? undefined,
             current.coords.speed ?? undefined
           );
+        } catch (e: any) {
+          console.warn("Current location error:", e?.message ?? e);
+        }
 
+        if (cancelled) return;
+
+        try {
           sub = await Location.watchPositionAsync(
             {
               accuracy: Location.Accuracy.BestForNavigation,
@@ -625,8 +664,15 @@ export default function MapScreen() {
   ]);
 
   const handleRegionChangeComplete = useCallback(
-    (nextRegion: Region) => {
+    (nextRegion: Region, details?: { isGesture?: boolean }) => {
       setRegion(nextRegion);
+
+      if (isProgrammaticCameraMoveRef.current) {
+        isProgrammaticCameraMoveRef.current = false;
+      } else if (details?.isGesture !== false) {
+        hasUserMovedMapRef.current = true;
+      }
+
       if (focusedClusterKey !== null) {
         setFocusedClusterKey(null);
       }
@@ -665,7 +711,10 @@ export default function MapScreen() {
     setProfileLoading(false);
     setSelectedMeetId(focusMeetId);
 
-    mapRef.current?.animateToRegion(
+    if (!mapRef.current) return;
+
+    isProgrammaticCameraMoveRef.current = true;
+    mapRef.current.animateToRegion(
       {
         latitude: targetLatitude,
         longitude: targetLongitude,
@@ -1108,21 +1157,24 @@ export default function MapScreen() {
                   closeProfileCard();
                   setSelectedMeetId(null);
                   setFocusedClusterKey(item.key);
-                  mapRef.current?.fitToCoordinates(
-                    item.members.map((member) => ({
-                      latitude: member.latitude,
-                      longitude: member.longitude,
-                    })),
-                    {
-                      edgePadding: {
-                        top: 110,
-                        right: 110,
-                        bottom: 110,
-                        left: 110,
-                      },
-                      animated: true,
-                    }
-                  );
+                  if (mapRef.current) {
+                    isProgrammaticCameraMoveRef.current = true;
+                    mapRef.current.fitToCoordinates(
+                      item.members.map((member) => ({
+                        latitude: member.latitude,
+                        longitude: member.longitude,
+                      })),
+                      {
+                        edgePadding: {
+                          top: 110,
+                          right: 110,
+                          bottom: 110,
+                          left: 110,
+                        },
+                        animated: true,
+                      }
+                    );
+                  }
                 }}
               >
                 <View style={styles.clusterBubble}>
@@ -1243,10 +1295,13 @@ export default function MapScreen() {
                   key={`sheet-meet-${meet.id}`}
                   onPress={() => {
                     setSelectedMeetId(meet.id);
-                    mapRef.current?.animateCamera({
-                      center: { latitude: meet.latitude, longitude: meet.longitude },
-                      zoom: 14,
-                    });
+                    if (mapRef.current) {
+                      isProgrammaticCameraMoveRef.current = true;
+                      mapRef.current.animateCamera({
+                        center: { latitude: meet.latitude, longitude: meet.longitude },
+                        zoom: 14,
+                      });
+                    }
                   }}
                   style={({ pressed }) => [styles.meetRowCard, pressed && { opacity: 0.88 }]}
                 >
