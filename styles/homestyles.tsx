@@ -205,6 +205,26 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
 
+  createPlaceholderContainer: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    backgroundColor: colors.black,
+  },
+  createPlaceholderTitle: {
+    color: colors.primary,
+    fontSize: 32,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  createPlaceholderSubtitle: {
+    color: colors.offwhite,
+    fontSize: 16,
+    textAlign: "center",
+  },
+
   // Top tab row
   homeTabsContainer: {
     flexDirection: "row",
