@@ -289,13 +289,28 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
 
         const uniq = Array.from(new Set(idsToLoad));
 
-        const [
-          { data: locRows, error: locErr },
-          { data: profRows, error: profErr },
-          { data: membershipRows, error: membershipErr },
-          { data: customizationRows, error: customizationErr },
-        ] = await Promise.all([
-          supabase.from("locations").select("*").in("user_id", uniq),
+        const { data: locRows, error: locErr } = await supabase
+          .from("locations")
+          .select("*")
+          .in("user_id", uniq);
+
+        if (locErr) throw locErr;
+        if (refreshSeqRef.current !== requestId) return;
+
+        const locMap: Record<string, LiveLoc> = {};
+        (locRows ?? []).forEach((l: any) => (locMap[l.user_id] = l as LiveLoc));
+        setLocationsById((prev) => ({ ...prev, ...locMap }));
+
+        const locationIds = Object.keys(locMap);
+        console.log("[MapData] loadForIds locations", {
+          requestedCount: uniq.length,
+          requestedIds: uniq,
+          locationCount: locationIds.length,
+          locationIds,
+          missingLocationIds: uniq.filter((id) => !locMap[id]),
+        });
+
+        const [profileResult, membershipResult, customizationResult] = await Promise.all([
           supabase
             .from("profiles")
             .select(
@@ -312,11 +327,33 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
             .in("user_id", uniq),
         ]);
 
-        if (locErr) throw locErr;
-        if (profErr) throw profErr;
-        if (membershipErr) throw membershipErr;
-        if (customizationErr) throw customizationErr;
         if (refreshSeqRef.current !== requestId) return;
+
+        if (profileResult.error) {
+          console.warn("[MapData] profile load failed; keeping location markers visible", {
+            requestedIds: uniq,
+            message: profileResult.error.message,
+          });
+          return;
+        }
+
+        if (membershipResult.error) {
+          console.warn("[MapData] membership load failed; using marker fallbacks", {
+            requestedIds: uniq,
+            message: membershipResult.error.message,
+          });
+        }
+
+        if (customizationResult.error) {
+          console.warn("[MapData] customization load failed; using marker fallbacks", {
+            requestedIds: uniq,
+            message: customizationResult.error.message,
+          });
+        }
+
+        const membershipRows = membershipResult.error ? [] : membershipResult.data;
+        const customizationRows = customizationResult.error ? [] : customizationResult.data;
+        const profRows = profileResult.data ?? [];
 
         const membershipByUserId = new Map<
           string,
@@ -335,7 +372,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         });
 
         const profMap: Record<string, Profile> = {};
-        (profRows ?? []).forEach((p: any) => {
+        profRows.forEach((p: any) => {
           const membership = membershipByUserId.get(p.id);
           const accentColor = customizationByUserId.get(p.id) ?? null;
           const plan = membership?.plan ?? null;
@@ -351,14 +388,20 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         });
         setProfilesById((prev) => ({ ...prev, ...profMap }));
 
-        (profRows ?? [])
+        profRows
           .map((p: any) => p.photo_url as string | null)
           .filter(Boolean)
           .forEach((uri) => Image.prefetch(uri!));
 
-        const locMap: Record<string, LiveLoc> = {};
-        (locRows ?? []).forEach((l: any) => (locMap[l.user_id] = l as LiveLoc));
-        setLocationsById((prev) => ({ ...prev, ...locMap }));
+        const profileIds = Object.keys(profMap);
+        console.log("[MapData] loadForIds profiles", {
+          requestedCount: uniq.length,
+          requestedIds: uniq,
+          profileCount: profileIds.length,
+          profileIds,
+          missingProfileIds: uniq.filter((id) => !profMap[id]),
+          locationIds,
+        });
       };
 
       try {
@@ -398,6 +441,10 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         setFriendsLoaded(false);
         const friendIds = await fetchFriendIds(uid);
         if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
+        console.log("[MapData] accepted friends", {
+          acceptedFriendCount: friendIds.length,
+          friendIds,
+        });
         setFriendIds(friendIds);
         setFriendsLoaded(true);
         const baseIds = Array.from(new Set([uid, ...friendIds]));

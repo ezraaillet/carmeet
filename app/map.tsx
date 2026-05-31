@@ -181,6 +181,7 @@ export default function MapScreen() {
   const {
     profilesById,
     locationsById,
+    friendIds,
     meets,
     meetAttendeeSummaryByMeetId,
     loading: mapDataLoading,
@@ -447,8 +448,14 @@ export default function MapScreen() {
     ])
   );
 
+  const locationsByIdKeys = useMemo(() => Object.keys(locationsById), [locationsById]);
+  const profilesByIdKeys = useMemo(() => Object.keys(profilesById), [profilesById]);
+
   const sourceLocations = useMemo(
-    () => Object.values(locationsById),
+    () =>
+      Object.values(locationsById).filter(
+        (loc) => Number.isFinite(loc.lat) && Number.isFinite(loc.lng)
+      ),
     [locationsById]
   );
 
@@ -638,7 +645,24 @@ export default function MapScreen() {
       ...renderedClusterMemberIds,
     ]);
 
-    console.log("[Map][ClusterThreshold] render-snapshot", {
+    const acceptedFriendDiagnostics = friendIds.map((id) => ({
+      userId: id,
+      hasLocation: Boolean(locationsById[id]),
+      hasValidLocation: sourceLocations.some((loc) => loc.user_id === id),
+      hasProfile: Boolean(profilesById[id]),
+      renderedAsUser: renderedUserIds.includes(id),
+      renderedInClusterMembers: renderedClusterMemberIds.includes(id),
+      renderedAnywhere: allRenderedIds.has(id),
+    }));
+
+    console.log("[Map][Markers] render-snapshot", {
+      acceptedFriendCount: friendIds.length,
+      friendIds,
+      locationsByIdKeys,
+      profilesByIdKeys,
+      finalRenderedUserMarkerIds: renderedUserIds,
+      finalRenderedClusterMemberIds: renderedClusterMemberIds,
+      acceptedFriendDiagnostics,
       shouldShowClusters,
       latitudeDelta: region.latitudeDelta,
       threshold: CLUSTER_MAX_ZOOM_LATITUDE_DELTA,
@@ -657,7 +681,12 @@ export default function MapScreen() {
     });
   }, [
     debugTrackedDistantUserIds,
+    friendIds,
+    locationsById,
+    locationsByIdKeys,
     mapMarkers,
+    profilesById,
+    profilesByIdKeys,
     region.latitudeDelta,
     shouldShowClusters,
     sourceLocations,
