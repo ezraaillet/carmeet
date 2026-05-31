@@ -1314,9 +1314,7 @@ export default function ProfileScreen() {
             }}
             style={s.bannerImage}
           />
-          <View style={s.bannerOverlayDark} />
-          <View style={s.bannerOverlayFadeStrong} />
-          <View style={s.bannerOverlayFadeSoft} />
+          <View style={s.bannerFadeOverlay} pointerEvents="none" />
         </View>
         <View
           style={[

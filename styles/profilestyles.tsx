@@ -392,31 +392,14 @@ const profileStyles = StyleSheet.create({
     height: "100%",
   },
 
-  bannerOverlayDark: {
+  bannerFadeOverlay: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
     height: 72,
-    backgroundColor: "rgba(0,0,0,0.25)",
-  },
-
-  bannerOverlayFadeStrong: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 42,
-    backgroundColor: "rgba(0,0,0,0.55)",
-  },
-
-  bannerOverlayFadeSoft: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 22,
-    backgroundColor: "rgba(0,0,0,0.78)",
+    experimental_backgroundImage:
+      "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.72) 62%, #000 100%)",
   },
 
   carActionsRow: {
