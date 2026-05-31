@@ -718,6 +718,14 @@ export default function ProfileScreen() {
   const membershipStatus = membership?.status ?? "inactive";
   const isPremium = membershipPlan === "premium" && membershipStatus === "active";
   const canAddAnotherCar = isPremium || cars.length === 0 || Boolean(editingCarId);
+  // Car CRUD is intentionally kept wired, but its main-list controls are hidden for the simplified Cars tab UI.
+  const hiddenCarCrudState = {
+    beginEditCar,
+    deleteCar,
+    canAddAnotherCar,
+    deletingCarId,
+  };
+  void hiddenCarCrudState;
   const appliedAccentColor = isPremium ? accentColor : DEFAULT_ACCENT_COLOR;
 
   async function saveAccentColor(nextColor: string) {
@@ -796,33 +804,7 @@ export default function ProfileScreen() {
 
   function renderCarsSection() {
     return (
-      <View style={s.sectionCard}>
-        <View style={s.carsHeaderRow}>
-          <Text style={s.sectionTitle}>Cars</Text>
-          <Pressable
-            onPress={() => {
-              if (showAddCar) {
-                setShowAddCar(false);
-                resetAddCarForm();
-                return;
-              }
-              if (!canAddAnotherCar) {
-                Alert.alert(
-                  "Premium feature",
-                  "Free members can add 1 car. Upgrade to Premium to add multiple cars."
-                );
-                return;
-              }
-              setShowAddCar(true);
-            }}
-            style={s.secondaryBtn}
-          >
-            <Text style={s.secondaryBtnText}>
-              {showAddCar ? "Cancel" : "Add Car"}
-            </Text>
-          </Pressable>
-        </View>
-
+      <View style={s.carsSection}>
         {showAddCar ? (
           <View style={s.addCarCard}>
             <View style={s.field}>
@@ -950,81 +932,44 @@ export default function ProfileScreen() {
             <Text style={s.placeholderText}>Loading cars…</Text>
           </View>
         ) : cars.length === 0 ? (
-          <Text style={s.placeholderText}>
-            No cars added yet. Tap Add Car to add your first one.
-          </Text>
+          <Text style={s.placeholderText}>No cars added yet.</Text>
         ) : (
-          cars.map((car) => (
-            <View key={car.id} style={s.carCard}>
-              <View style={s.carImageWrap}>
-                {car.photo_url ? (
-                  <Image source={{ uri: car.photo_url }} style={s.carImage} />
-                ) : (
-                  <View style={s.carImagePlaceholder}>
-                    <Text style={s.carPlaceholderText}>No photo</Text>
-                  </View>
-                )}
-                <View style={s.carImageOverlay} />
-                <Text style={s.carImageTitle}>
-                  {[car.year, car.make, car.model]
-                    .filter(Boolean)
-                    .join(" ")
-                    .trim() || "Untitled car"}
-                </Text>
-              </View>
+          cars.map((car) => {
+            const carTitle = [car.year, car.make, car.model]
+              .filter(Boolean)
+              .join(" ")
+              .trim() || "Untitled car";
+            const carDetails = [
+              car.color,
+              car.trim,
+              car.is_primary ? "Primary" : null,
+            ]
+              .filter(Boolean)
+              .join(" • ");
 
-              <View style={s.carContent}>
-                {car.is_primary ? <Text style={s.carMeta}>Primary car</Text> : null}
-                {car.color ? (
-                  <Text style={s.carMeta}>Color: {car.color}</Text>
-                ) : null}
-                {car.trim ? (
-                  <Text style={s.carMeta}>Trim: {car.trim}</Text>
-                ) : null}
-                {car.description ? (
-                  <Text style={s.carMeta}>{car.description}</Text>
-                ) : null}
-                <View style={s.carActionsRow}>
-                <Pressable
-                  onPress={() => beginEditCar(car)}
-                  style={[s.carActionBtn, s.carActionBtnSecondary]}
-                >
-                  <Text style={s.secondaryBtnText}>Edit</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() =>
-                    Alert.alert(
-                      "Delete car?",
-                      "This action cannot be undone.",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Delete",
-                          style: "destructive",
-                          onPress: () => {
-                            void deleteCar(car);
-                          },
-                        },
-                      ]
-                    )
-                  }
-                  disabled={deletingCarId === car.id}
-                  style={[
-                    s.carActionBtn,
-                    s.carActionBtnSecondary,
-                    deletingCarId === car.id && { opacity: 0.7 },
-                  ]}
-                >
-                  {deletingCarId === car.id ? (
-                    <ActivityIndicator />
+            return (
+              <View key={car.id} style={s.carCard}>
+                <View style={s.carImageWrap}>
+                  {car.photo_url ? (
+                    <Image source={{ uri: car.photo_url }} style={s.carImage} />
                   ) : (
-                    <Text style={s.secondaryBtnText}>Delete</Text>
+                    <View style={s.carImagePlaceholder}>
+                      <Text style={s.carPlaceholderText}>No photo</Text>
+                    </View>
                   )}
-                </Pressable>
+                  <View style={s.carImageOverlay} />
+                  <Text style={s.carImageTitle}>{carTitle}</Text>
+                </View>
+
+                <View style={s.carContent}>
+                  {car.description ? (
+                    <Text style={s.carDescription}>{car.description}</Text>
+                  ) : null}
+                  {carDetails ? <Text style={s.carMeta}>{carDetails}</Text> : null}
+                </View>
               </View>
-              </View>
-            </View>
-          ))
+            );
+          })
         )}
       </View>
     );

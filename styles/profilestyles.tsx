@@ -259,6 +259,10 @@ const profileStyles = StyleSheet.create({
     lineHeight: 20,
   },
 
+  carsSection: {
+    marginHorizontal: 16,
+  },
+
   carsHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -304,26 +308,26 @@ const profileStyles = StyleSheet.create({
   },
 
   carCard: {
-    borderRadius: 12,
-    marginTop: 12,
-    backgroundColor: colors.black,
+    marginBottom: 24,
+    backgroundColor: "transparent",
   },
 
   carImageWrap: {
-    borderRadius: 12,
+    borderRadius: 24,
     overflow: "hidden",
     position: "relative",
+    backgroundColor: colors.charcoal,
   },
 
   carImage: {
     width: "100%",
-    height: 210,
+    height: 236,
     backgroundColor: colors.charcoal,
   },
 
   carImagePlaceholder: {
     width: "100%",
-    height: 210,
+    height: 236,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.charcoal,
@@ -339,17 +343,21 @@ const profileStyles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 64,
-    backgroundColor: "rgba(0,0,0,0.52)",
+    height: 88,
+    backgroundColor: "rgba(0,0,0,0.58)",
   },
 
   carImageTitle: {
     position: "absolute",
-    left: 12,
-    bottom: 10,
+    left: 18,
+    right: 18,
+    bottom: 16,
     color: colors.offwhite,
-    fontSize: 21,
-    fontWeight: "700",
+    fontSize: 24,
+    fontWeight: "800",
+    textShadowColor: "rgba(0,0,0,0.8)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
 
   addCarPhotoPreview: {
@@ -370,12 +378,19 @@ const profileStyles = StyleSheet.create({
   carMeta: {
     color: colors.silver,
     marginBottom: 4,
+    lineHeight: 20,
+  },
+
+  carDescription: {
+    color: colors.offwhite,
+    fontSize: 15,
+    lineHeight: 21,
+    marginBottom: 5,
   },
 
   carContent: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
     paddingTop: 10,
-    paddingBottom: 6,
   },
 
   meetCard: {
