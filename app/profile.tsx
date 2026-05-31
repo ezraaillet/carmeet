@@ -1316,33 +1316,40 @@ export default function ProfileScreen() {
           />
           <View style={s.bannerFadeOverlay} pointerEvents="none" />
         </View>
-        <View
-          style={[
-            s.avatarWrap,
-            { borderColor: appliedAccentColor },
-          ]}
-        >
-          {photoUrl ? (
-            <Image source={{ uri: photoUrl }} style={s.avatar} />
-          ) : (
-            <View style={[s.avatar, s.avatarFallback]}>
-              <Text style={s.avatarInitials}>{initials || "?"}</Text>
-            </View>
-          )}
-        </View>
-
         <View style={s.headerTextWrap}>
-          <View style={s.displayNameRow}>
-            <Text style={s.displayNameText}>
-              {displayName.trim() || "No display name"}
-            </Text>
-            {isPremium ? (
-              <View style={s.premiumBadge}>
-                <Text style={s.premiumBadgeText}>✓</Text>
+          <View style={s.heroIdentityRow}>
+            <View
+              style={[
+                s.avatarWrap,
+                { borderColor: appliedAccentColor },
+              ]}
+            >
+              {photoUrl ? (
+                <Image source={{ uri: photoUrl }} style={s.avatar} />
+              ) : (
+                <View style={[s.avatar, s.avatarFallback]}>
+                  <Text style={s.avatarInitials}>{initials || "?"}</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={s.identityTextWrap}>
+              <View style={s.displayNameRow}>
+                <Text style={s.displayNameText}>
+                  {displayName.trim() || "No display name"}
+                </Text>
+                {isPremium ? (
+                  <View style={s.premiumBadge}>
+                    <Text style={s.premiumBadgeText}>✓</Text>
+                  </View>
+                ) : null}
               </View>
-            ) : null}
+              <Text style={s.usernameText}>
+                @{username.trim() || "username"}
+              </Text>
+            </View>
           </View>
-          <Text style={s.usernameText}>@{username.trim() || "username"}</Text>
+
           {bio.trim() ? <Text style={s.bioText}>{bio}</Text> : null}
           {hasLocation ? <Text style={s.locationText}>{locationText}</Text> : null}
           {socialLinks.length > 0 ? (
