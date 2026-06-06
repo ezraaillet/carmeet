@@ -192,7 +192,6 @@ const ClusterMarker = React.memo(function ClusterMarker({
         offsetAboveCurrentUser ? styles.clusterPinMarkerOffsetAboveUser : null,
       ]}
     >
-      {offsetAboveCurrentUser ? <View style={styles.clusterPinMarkerAnchorTail} /> : null}
       <View
         style={[
           styles.clusterAvatarFan,
