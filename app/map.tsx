@@ -63,6 +63,7 @@ const OTHER_USER_MARKER_Z_INDEX = 100;
 const MY_USER_MARKER_Z_INDEX = 900;
 const MEET_MARKER_Z_INDEX = 1000;
 const CLUSTER_MARKER_Z_INDEX = 1200;
+const FOCUS_ME_CAMERA_ZOOM = 17;
 
 type MarkerAvatarData = {
   userId: string;
@@ -327,7 +328,7 @@ export default function MapScreen() {
 
   const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
   const [meetSearchQuery, setMeetSearchQuery] = useState("");
-  const [showMeetMarkers, setShowMeetMarkers] = useState(true);
+  const [showMeetPins, setShowMeetPins] = useState(true);
 
   useEffect(() => {
     selectedMeetIdRef.current = selectedMeetId;
@@ -1159,14 +1160,14 @@ export default function MapScreen() {
     mapRef.current.animateCamera(
       {
         center: target,
-        zoom: 16,
+        zoom: FOCUS_ME_CAMERA_ZOOM,
       },
       { duration: 700 }
     );
   }, [currentUserLocation, effectiveMyUserId, setMyLiveLocation]);
 
   const toggleMeetMarkers = useCallback(() => {
-    setShowMeetMarkers((visible) => !visible);
+    setShowMeetPins((visible) => !visible);
   }, []);
 
   const handleGetDirections = useCallback(async () => {
@@ -1448,7 +1449,7 @@ export default function MapScreen() {
           );
         })}
 
-        {showMeetMarkers && meetMarkers.map((meet) => (
+        {showMeetPins && meetMarkers.map((meet) => (
           <Marker
             key={`meet-${meet.id}`}
             coordinate={{ latitude: meet.latitude, longitude: meet.longitude }}
@@ -1541,20 +1542,20 @@ export default function MapScreen() {
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={showMeetMarkers ? "Hide meet pins" : "Show meet pins"}
-          accessibilityState={{ selected: showMeetMarkers }}
+          accessibilityLabel={showMeetPins ? "Hide meet pins" : "Show meet pins"}
+          accessibilityState={{ selected: showMeetPins }}
           onPress={toggleMeetMarkers}
           style={({ pressed }) => [
             styles.mapControlButton,
-            showMeetMarkers ? styles.mapControlButtonActive : styles.mapControlButtonInactive,
+            showMeetPins ? styles.mapControlButtonActive : styles.mapControlButtonInactive,
             pressed && styles.mapControlButtonPressed,
           ]}
         >
           <MaterialCommunityIcons
             name="map-marker"
             size={34}
-            color={showMeetMarkers ? "#ef4444" : "#8a8a8a"}
-            style={showMeetMarkers ? undefined : styles.mapControlMeetIconInactive}
+            color={showMeetPins ? "#ef4444" : "#8a8a8a"}
+            style={showMeetPins ? undefined : styles.mapControlMeetIconInactive}
           />
         </Pressable>
       </Animated.View>
