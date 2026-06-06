@@ -385,6 +385,9 @@ const mapStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  meetMarkerWrapSelected: {
+    transform: [{ scale: 1.12 }],
+  },
   meetMarkerIcon: {
     fontSize: 38,
     lineHeight: 40,
