@@ -57,6 +57,10 @@ const OVERLAP_SPREAD_RADIUS_METERS = 7;
 const CLUSTER_MIN_SIZE = 4;
 const CLUSTER_MAX_ZOOM_LATITUDE_DELTA = 0.012;
 const DEFAULT_MARKER_BORDER_COLOR = colors.primary;
+const MEET_MARKER_Z_INDEX = 400;
+const OTHER_USER_MARKER_Z_INDEX = 900;
+const MY_USER_MARKER_Z_INDEX = 1100;
+const CLUSTER_MARKER_Z_INDEX = 1200;
 
 type MarkerAvatarData = {
   userId: string;
@@ -203,11 +207,12 @@ const ClusterMarker = React.memo(function ClusterMarker({
             )}
           </View>
         ))}
+        {count > 3 ? (
+          <View style={styles.clusterAvatarCountBadge}>
+            <Text style={styles.clusterAvatarCountText}>{count}</Text>
+          </View>
+        ) : null}
       </View>
-      <View style={styles.clusterPinBase}>
-        {count > 3 ? <Text style={styles.clusterPinCount}>{count}</Text> : null}
-      </View>
-      <View style={styles.clusterPinTail} />
     </View>
   );
 });
@@ -1313,7 +1318,7 @@ export default function MapScreen() {
             coordinate={{ latitude: meet.latitude, longitude: meet.longitude }}
             title={meet.title || "Meet"}
             description={meet.location_name || "Car meet"}
-            zIndex={400}
+            zIndex={MEET_MARKER_Z_INDEX}
             onPress={() => {
               closeProfileCard();
               setSelectedMeetId(meet.id);
@@ -1340,7 +1345,7 @@ export default function MapScreen() {
                 anchor={{ x: 0.5, y: 1 }}
                 title="Nearby group"
                 description={`${item.count} people nearby`}
-                zIndex={1000}
+                zIndex={CLUSTER_MARKER_Z_INDEX}
                 onPress={() => {
                   closeProfileCard();
                   setSelectedMeetId(null);
@@ -1364,6 +1369,7 @@ export default function MapScreen() {
                     );
                   }
                 }}
+                stopPropagation
               >
                 <ClusterMarker avatars={clusterAvatars} count={item.count} />
               </Marker>
@@ -1392,7 +1398,7 @@ export default function MapScreen() {
             <AnimatedUserMarker
               key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
               userId={loc.user_id}
-              zIndex={loc.user_id === effectiveMyUserId ? 1100 : 900}
+              zIndex={loc.user_id === effectiveMyUserId ? MY_USER_MARKER_Z_INDEX : OTHER_USER_MARKER_Z_INDEX}
               coordinate={animatedCoordinate}
               title={markerName}
               description={fresh ? "Live" : `Last seen ${lastSeen}`}
