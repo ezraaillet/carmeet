@@ -71,6 +71,7 @@ type MeetAttendance = {
 
 type MeetAttendeeSummary = {
   going: number;
+  interested: number;
 };
 
 type MapDataState = {
@@ -263,11 +264,13 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           const status = (row.status ?? "").toLowerCase();
 
           if (!acc[meetId]) {
-            acc[meetId] = { going: 0 };
+            acc[meetId] = { going: 0, interested: 0 };
           }
 
           if (status === "going") {
             acc[meetId].going += 1;
+          } else if (status === "interested") {
+            acc[meetId].interested += 1;
           }
 
           return acc;
