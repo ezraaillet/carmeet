@@ -185,6 +185,7 @@ export default function MapScreen() {
     meets,
     meetAttendeeSummaryByMeetId,
     loading: mapDataLoading,
+    myUserId: mapDataUserId,
     setMyLiveLocation,
   } = useMapData();
 
@@ -450,6 +451,7 @@ export default function MapScreen() {
 
   const locationsByIdKeys = useMemo(() => Object.keys(locationsById), [locationsById]);
   const profilesByIdKeys = useMemo(() => Object.keys(profilesById), [profilesById]);
+  const effectiveMyUserId = myUserId ?? mapDataUserId;
 
   const sourceLocations = useMemo(
     () =>
@@ -478,19 +480,69 @@ export default function MapScreen() {
       .map((item) => item.userId);
   }, [region.latitude, region.longitude, sourceLocations]);
 
+  const markerDataSignature = useMemo(() => {
+    const locationSignature = Object.values(locationsById)
+      .map(
+        (loc) =>
+          `${loc.user_id}:${loc.lat}:${loc.lng}:${loc.updated_at ?? ""}`
+      )
+      .sort()
+      .join("|");
+    const profileSignature = Object.values(profilesById)
+      .map(
+        (profile) =>
+          `${profile.id}:${profile.photo_url ?? ""}:${profile.display_name ?? ""}:${profile.username ?? ""}:${profile.is_active_premium ? "1" : "0"}:${profile.accent_color ?? ""}`
+      )
+      .sort()
+      .join("|");
+    const friendSignature = [...friendIds].sort().join("|");
+
+    return `${effectiveMyUserId ?? ""}::${friendSignature}::${locationSignature}::${profileSignature}`;
+  }, [effectiveMyUserId, friendIds, locationsById, profilesById]);
+
   const mapMarkers = useMemo(() => {
+    // Include the map-data signature so marker generation reruns when refreshes
+    // update friends/profiles/location rows even if the region has not changed.
+    void markerDataSignature;
+
     const nearbyThresholdMeters = Math.max(
       20,
       Math.min(120, 40 * (region.latitudeDelta / 0.05))
     );
     // Always derive marker output from the full live-location dataset.
     // Profile availability only changes marker presentation, never inclusion.
-    const baseLocations = sourceLocations;
+    const friendIdSet = new Set(friendIds);
+    const baseLocationsById = new Map<string, LiveLoc>();
+
+    friendIds.forEach((friendId) => {
+      const friendLocation = locationsById[friendId];
+      if (
+        friendLocation &&
+        Number.isFinite(friendLocation.lat) &&
+        Number.isFinite(friendLocation.lng)
+      ) {
+        baseLocationsById.set(friendId, friendLocation);
+      }
+    });
+
+    sourceLocations.forEach((loc) => {
+      if (!baseLocationsById.has(loc.user_id)) {
+        baseLocationsById.set(loc.user_id, loc);
+      }
+    });
+
+    const baseLocations = Array.from(baseLocationsById.values());
+    const clusterableLocations = baseLocations.filter(
+      (loc) => loc.user_id !== effectiveMyUserId && !friendIdSet.has(loc.user_id)
+    );
+    const alwaysRenderedLocations = baseLocations.filter(
+      (loc) => loc.user_id === effectiveMyUserId || friendIdSet.has(loc.user_id)
+    );
 
     const visited = new Set<string>();
     const groups: LiveLoc[][] = [];
 
-    for (const loc of baseLocations) {
+    for (const loc of clusterableLocations) {
       if (visited.has(loc.user_id)) continue;
 
       const queue: LiveLoc[] = [loc];
@@ -503,7 +555,7 @@ export default function MapScreen() {
 
         group.push(current);
 
-        baseLocations.forEach((candidate) => {
+        clusterableLocations.forEach((candidate) => {
           if (visited.has(candidate.user_id)) return;
 
           if (distanceInMeters(current, candidate) <= nearbyThresholdMeters) {
@@ -532,6 +584,7 @@ export default function MapScreen() {
           members: { userId: string; latitude: number; longitude: number }[];
         }
     )[] = [];
+    const individualLocations: LiveLoc[] = [...alwaysRenderedLocations];
 
     groups.forEach((group, groupIdx) => {
       if (shouldShowClusters && group.length >= CLUSTER_MIN_SIZE) {
@@ -558,57 +611,66 @@ export default function MapScreen() {
         return;
       }
 
-      const overlapVisited = new Set<string>();
-      const overlapGroups: LiveLoc[][] = [];
+      individualLocations.push(...group);
+    });
 
-      group.forEach((loc) => {
-        if (overlapVisited.has(loc.user_id)) return;
+    const overlapVisited = new Set<string>();
+    const overlapGroups: LiveLoc[][] = [];
 
-        const overlapMembers = group.filter(
-          (candidate) =>
-            !overlapVisited.has(candidate.user_id) &&
-            distanceInMeters(loc, candidate) <= OVERLAP_THRESHOLD_METERS
-        );
+    individualLocations.forEach((loc) => {
+      if (overlapVisited.has(loc.user_id)) return;
 
-        overlapMembers.forEach((member) => overlapVisited.add(member.user_id));
-        overlapGroups.push(overlapMembers);
-      });
+      const overlapMembers = individualLocations.filter(
+        (candidate) =>
+          !overlapVisited.has(candidate.user_id) &&
+          distanceInMeters(loc, candidate) <= OVERLAP_THRESHOLD_METERS
+      );
 
-      overlapGroups.forEach((overlapGroup) => {
-        if (overlapGroup.length <= 1) {
-          const [loc] = overlapGroup;
-          if (!loc) return;
-          renderedMarkers.push({
-            type: "user",
-            loc,
-            adjLat: loc.lat,
-            adjLng: loc.lng,
-          });
-          return;
-        }
+      overlapMembers.forEach((member) => overlapVisited.add(member.user_id));
+      overlapGroups.push(overlapMembers);
+    });
 
-        overlapGroup.forEach((loc, i) => {
-          const angle = (2 * Math.PI * i) / overlapGroup.length;
-          const latRad = (loc.lat * Math.PI) / 180;
-          const metersPerDegLat = 111_111;
-          const metersPerDegLng = 111_111 * Math.cos(latRad);
+    overlapGroups.forEach((overlapGroup) => {
+      if (overlapGroup.length <= 1) {
+        const [loc] = overlapGroup;
+        if (!loc) return;
+        renderedMarkers.push({
+          type: "user",
+          loc,
+          adjLat: loc.lat,
+          adjLng: loc.lng,
+        });
+        return;
+      }
 
-          const dx = OVERLAP_SPREAD_RADIUS_METERS * Math.cos(angle);
-          const dy = OVERLAP_SPREAD_RADIUS_METERS * Math.sin(angle);
+      overlapGroup.forEach((loc, i) => {
+        const angle = (2 * Math.PI * i) / overlapGroup.length;
+        const latRad = (loc.lat * Math.PI) / 180;
+        const metersPerDegLat = 111_111;
+        const metersPerDegLng = 111_111 * Math.cos(latRad);
 
-          renderedMarkers.push({
-            type: "user",
-            loc,
-            adjLat: loc.lat + dy / metersPerDegLat,
-            adjLng: loc.lng + dx / metersPerDegLng,
-          });
+        const dx = OVERLAP_SPREAD_RADIUS_METERS * Math.cos(angle);
+        const dy = OVERLAP_SPREAD_RADIUS_METERS * Math.sin(angle);
+
+        renderedMarkers.push({
+          type: "user",
+          loc,
+          adjLat: loc.lat + dy / metersPerDegLat,
+          adjLng: loc.lng + dx / metersPerDegLng,
         });
       });
     });
 
     return renderedMarkers;
-  }, [region.latitudeDelta, shouldShowClusters, sourceLocations]);
-
+  }, [
+    effectiveMyUserId,
+    friendIds,
+    locationsById,
+    markerDataSignature,
+    region.latitudeDelta,
+    shouldShowClusters,
+    sourceLocations,
+  ]);
 
   useEffect(() => {
     const previousMode = previousClusterModeRef.current;
@@ -1244,7 +1306,7 @@ export default function MapScreen() {
             <AnimatedUserMarker
               key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
               userId={loc.user_id}
-              zIndex={loc.user_id === myUserId ? 1100 : 900}
+              zIndex={loc.user_id === effectiveMyUserId ? 1100 : 900}
               coordinate={animatedCoordinate}
               title={markerName}
               description={fresh ? "Live" : `Last seen ${lastSeen}`}
