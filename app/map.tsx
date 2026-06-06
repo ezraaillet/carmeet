@@ -57,9 +57,9 @@ const OVERLAP_SPREAD_RADIUS_METERS = 7;
 const CLUSTER_MIN_SIZE = 4;
 const CLUSTER_MAX_ZOOM_LATITUDE_DELTA = 0.012;
 const DEFAULT_MARKER_BORDER_COLOR = colors.primary;
-const MEET_MARKER_Z_INDEX = 400;
-const OTHER_USER_MARKER_Z_INDEX = 900;
-const MY_USER_MARKER_Z_INDEX = 1100;
+const OTHER_USER_MARKER_Z_INDEX = 100;
+const MY_USER_MARKER_Z_INDEX = 900;
+const MEET_MARKER_Z_INDEX = 1000;
 const CLUSTER_MARKER_Z_INDEX = 1200;
 
 type MarkerAvatarData = {
@@ -927,6 +927,23 @@ export default function MapScreen() {
     [mapMarkers]
   );
 
+  const clusterMarkerItems = useMemo(
+    () =>
+      mapMarkers.filter(
+        (
+          item
+        ): item is {
+          type: "cluster";
+          key: string;
+          lat: number;
+          lng: number;
+          count: number;
+          members: { userId: string; latitude: number; longitude: number }[];
+        } => item.type === "cluster"
+      ),
+    [mapMarkers]
+  );
+
   const getOrCreateAnimatedUserCoordinate = useCallback(
     (userId: string, latitude: number, longitude: number) => {
       let coord = animatedUserCoordsRef.current[userId];
@@ -1312,70 +1329,7 @@ export default function MapScreen() {
         initialRegion={region}
         onRegionChangeComplete={handleRegionChangeComplete}
       >
-        {meetMarkers.map((meet) => (
-          <Marker
-            key={`meet-${meet.id}`}
-            coordinate={{ latitude: meet.latitude, longitude: meet.longitude }}
-            title={meet.title || "Meet"}
-            description={meet.location_name || "Car meet"}
-            zIndex={MEET_MARKER_Z_INDEX}
-            onPress={() => {
-              closeProfileCard();
-              setSelectedMeetId(meet.id);
-            }}
-          >
-            <View style={styles.meetMarkerWrap}>
-              <Text style={styles.meetMarkerIcon}>📍</Text>
-            </View>
-          </Marker>
-        ))}
-
-        {mapMarkers.map((item) => {
-          if (item.type === "cluster") {
-            const clusterAvatars = item.members
-              .slice(0, 3)
-              .map((member) =>
-                getProfileMarkerAvatar(profilesById[member.userId], member.userId)
-              );
-
-            return (
-              <Marker
-                key={`cluster-mode-${clusterModeVersion}-${item.key}`}
-                coordinate={{ latitude: item.lat, longitude: item.lng }}
-                anchor={{ x: 0.5, y: 1 }}
-                title="Nearby group"
-                description={`${item.count} people nearby`}
-                zIndex={CLUSTER_MARKER_Z_INDEX}
-                onPress={() => {
-                  closeProfileCard();
-                  setSelectedMeetId(null);
-                  setFocusedClusterKey(item.key);
-                  if (mapRef.current) {
-                    isProgrammaticCameraMoveRef.current = true;
-                    mapRef.current.fitToCoordinates(
-                      item.members.map((member) => ({
-                        latitude: member.latitude,
-                        longitude: member.longitude,
-                      })),
-                      {
-                        edgePadding: {
-                          top: 110,
-                          right: 110,
-                          bottom: 110,
-                          left: 110,
-                        },
-                        animated: true,
-                      }
-                    );
-                  }
-                }}
-                stopPropagation
-              >
-                <ClusterMarker avatars={clusterAvatars} count={item.count} />
-              </Marker>
-            );
-          }
-
+        {userMarkerItems.map((item) => {
           const { loc, adjLat, adjLng } = item;
           const p = profilesById[loc.user_id];
 
@@ -1411,6 +1365,69 @@ export default function MapScreen() {
                 markerRefs.current[userId] = marker;
               }}
             />
+          );
+        })}
+
+        {meetMarkers.map((meet) => (
+          <Marker
+            key={`meet-${meet.id}`}
+            coordinate={{ latitude: meet.latitude, longitude: meet.longitude }}
+            title={meet.title || "Meet"}
+            description={meet.location_name || "Car meet"}
+            zIndex={MEET_MARKER_Z_INDEX}
+            onPress={() => {
+              closeProfileCard();
+              setSelectedMeetId(meet.id);
+            }}
+          >
+            <View style={styles.meetMarkerWrap}>
+              <Text style={styles.meetMarkerIcon}>📍</Text>
+            </View>
+          </Marker>
+        ))}
+
+        {clusterMarkerItems.map((item) => {
+          const clusterAvatars = item.members
+            .slice(0, 3)
+            .map((member) =>
+              getProfileMarkerAvatar(profilesById[member.userId], member.userId)
+            );
+
+          return (
+            <Marker
+              key={`cluster-mode-${clusterModeVersion}-${item.key}`}
+              coordinate={{ latitude: item.lat, longitude: item.lng }}
+              anchor={{ x: 0.5, y: 1 }}
+              title="Nearby group"
+              description={`${item.count} people nearby`}
+              zIndex={CLUSTER_MARKER_Z_INDEX}
+              onPress={() => {
+                closeProfileCard();
+                setSelectedMeetId(null);
+                setFocusedClusterKey(item.key);
+                if (mapRef.current) {
+                  isProgrammaticCameraMoveRef.current = true;
+                  mapRef.current.fitToCoordinates(
+                    item.members.map((member) => ({
+                      latitude: member.latitude,
+                      longitude: member.longitude,
+                    })),
+                    {
+                      edgePadding: {
+                        top: 110,
+                        right: 110,
+                        bottom: 110,
+                        left: 110,
+                      },
+                      animated: true,
+                    }
+                  );
+                }
+              }}
+              stopPropagation
+            >
+              <ClusterMarker avatars={clusterAvatars} count={item.count} />
+            </Marker>
           );
         })}
       </MapView>
