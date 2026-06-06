@@ -393,6 +393,43 @@ const mapStyles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 3,
   },
+  mapControlsContainer: {
+    position: "absolute",
+    right: 16,
+    zIndex: 20,
+    elevation: 20,
+    gap: 10,
+  },
+  mapControlButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: "rgba(8,8,8,0.94)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 8,
+  },
+  mapControlButtonPressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.96 }],
+  },
+  mapControlButtonActive: {
+    borderColor: "rgba(239,68,68,0.8)",
+    backgroundColor: "rgba(28,8,8,0.96)",
+  },
+  mapControlButtonInactive: {
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  mapControlMeetIconInactive: {
+    color: "#8a8a8a",
+    opacity: 0.48,
+  },
   meetsSheetContainer: {
     position: "absolute",
     left: 0,

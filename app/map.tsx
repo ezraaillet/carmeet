@@ -43,6 +43,7 @@ import {
 } from "@/features/map/mapService";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "@/styles/themes";
 import styles from "@/styles/mapstyles";
 import { supabase } from "../database/supabase";
@@ -326,6 +327,7 @@ export default function MapScreen() {
 
   const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
   const [meetSearchQuery, setMeetSearchQuery] = useState("");
+  const [showMeetMarkers, setShowMeetMarkers] = useState(true);
 
   useEffect(() => {
     selectedMeetIdRef.current = selectedMeetId;
@@ -1003,6 +1005,11 @@ export default function MapScreen() {
         latitude: item.adjLat,
         longitude: item.adjLng,
       };
+      const nextAnimatedRegion = {
+        ...nextCoordinate,
+        latitudeDelta: 0,
+        longitudeDelta: 0,
+      };
 
       const animatedCoord = getOrCreateAnimatedUserCoordinate(
         userId,
@@ -1018,7 +1025,7 @@ export default function MapScreen() {
       lastAnimatedTargetsRef.current[userId] = nextCoordinate;
 
       if (metersMoved > MARKER_SNAP_THRESHOLD_METERS) {
-        animatedCoord.setValue(nextCoordinate);
+        animatedCoord.setValue(nextAnimatedRegion);
         return;
       }
 
@@ -1032,11 +1039,11 @@ export default function MapScreen() {
 
       animatedCoord
         .timing({
-          ...nextCoordinate,
+          ...nextAnimatedRegion,
           duration: MARKER_ANIMATION_DURATION_MS,
           useNativeDriver: false,
           easing: Easing.linear,
-        })
+        } as any)
         .start();
     });
   }, [getOrCreateAnimatedUserCoordinate, userMarkerItems]);
@@ -1110,6 +1117,57 @@ export default function MapScreen() {
       }),
     [animateSheetTo, collapsedSheetHeight, expandedSheetHeight, sheetHeightAnim]
   );
+
+  const focusMyLocation = useCallback(async () => {
+    let target = currentUserLocation
+      ? { latitude: currentUserLocation.lat, longitude: currentUserLocation.lng }
+      : null;
+
+    if (!target) {
+      try {
+        const current = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+
+        target = {
+          latitude: current.coords.latitude,
+          longitude: current.coords.longitude,
+        };
+
+        if (effectiveMyUserId) {
+          setMyLiveLocation({
+            user_id: effectiveMyUserId,
+            lat: current.coords.latitude,
+            lng: current.coords.longitude,
+            heading: current.coords.heading ?? undefined,
+            speed: current.coords.speed ?? undefined,
+            updated_at: new Date().toISOString(),
+          });
+        }
+
+        setGotFix(true);
+      } catch (e: any) {
+        console.warn("Focus location error:", e?.message ?? e);
+        return;
+      }
+    }
+
+    if (!mapRef.current || !target) return;
+
+    closeProfileCard();
+    isProgrammaticCameraMoveRef.current = true;
+    mapRef.current.animateCamera(
+      {
+        center: target,
+        zoom: 16,
+      },
+      { duration: 700 }
+    );
+  }, [currentUserLocation, effectiveMyUserId, setMyLiveLocation]);
+
+  const toggleMeetMarkers = useCallback(() => {
+    setShowMeetMarkers((visible) => !visible);
+  }, []);
 
   const handleGetDirections = useCallback(async () => {
     if (!selectedMeetHasCoordinates || !selectedMeet) return;
@@ -1390,7 +1448,7 @@ export default function MapScreen() {
           );
         })}
 
-        {meetMarkers.map((meet) => (
+        {showMeetMarkers && meetMarkers.map((meet) => (
           <Marker
             key={`meet-${meet.id}`}
             coordinate={{ latitude: meet.latitude, longitude: meet.longitude }}
@@ -1463,6 +1521,43 @@ export default function MapScreen() {
           );
         })}
       </MapView>
+
+      <Animated.View
+        style={[
+          styles.mapControlsContainer,
+          { bottom: Animated.add(sheetHeightAnim, 16) },
+        ]}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Focus Me"
+          onPress={focusMyLocation}
+          style={({ pressed }) => [
+            styles.mapControlButton,
+            pressed && styles.mapControlButtonPressed,
+          ]}
+        >
+          <MaterialCommunityIcons name="crosshairs-gps" size={30} color="#fff" />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={showMeetMarkers ? "Hide meet pins" : "Show meet pins"}
+          accessibilityState={{ selected: showMeetMarkers }}
+          onPress={toggleMeetMarkers}
+          style={({ pressed }) => [
+            styles.mapControlButton,
+            showMeetMarkers ? styles.mapControlButtonActive : styles.mapControlButtonInactive,
+            pressed && styles.mapControlButtonPressed,
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="map-marker"
+            size={34}
+            color={showMeetMarkers ? "#ef4444" : "#8a8a8a"}
+            style={showMeetMarkers ? undefined : styles.mapControlMeetIconInactive}
+          />
+        </Pressable>
+      </Animated.View>
 
       {(showLocationOverlay || showMapDataOverlay) && (
         <View
