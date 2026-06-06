@@ -58,6 +58,43 @@ const CLUSTER_MIN_SIZE = 4;
 const CLUSTER_MAX_ZOOM_LATITUDE_DELTA = 0.012;
 const DEFAULT_MARKER_BORDER_COLOR = colors.primary;
 
+type MarkerAvatarData = {
+  userId: string;
+  uri: string | null;
+  initials: string;
+  borderColor?: string;
+};
+
+function getMarkerInitials(name: string) {
+  return name
+    .split(" ")
+    .map((x) => x[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function getProfileMarkerName(profile: Profile | undefined, userId: string) {
+  return profile?.display_name || profile?.username || userId.slice(0, 8);
+}
+
+function getProfileMarkerBorderColor(profile: Profile | undefined) {
+  return profile?.is_active_premium && profile?.accent_color
+    ? profile.accent_color
+    : DEFAULT_MARKER_BORDER_COLOR;
+}
+
+function getProfileMarkerAvatar(profile: Profile | undefined, userId: string): MarkerAvatarData {
+  const markerName = getProfileMarkerName(profile, userId);
+
+  return {
+    userId,
+    uri: profile?.photo_url ?? null,
+    initials: getMarkerInitials(markerName),
+    borderColor: getProfileMarkerBorderColor(profile),
+  };
+}
+
 
 function getMeetRowStatusLabel(
   status?: string | null,
@@ -107,6 +144,74 @@ type AnimatedUserMarkerProps = {
   onRef: (userId: string, marker: any) => void;
 };
 
+const UserPinAvatar = React.memo(function UserPinAvatar({
+  uri,
+  initials,
+  borderColor,
+  fresh = true,
+}: {
+  uri: string | null;
+  initials: string;
+  borderColor: string;
+  fresh?: boolean;
+}) {
+  return (
+    <View style={[styles.userPinMarker, { opacity: fresh ? 1 : 0.45 }]}>
+      <View style={[styles.userPinTail, { borderTopColor: borderColor }]} />
+      <View style={[styles.userPinAvatarRing, { borderColor }]}>
+        {uri ? (
+          <Image source={{ uri }} style={styles.userPinAvatarImage} />
+        ) : (
+          <View style={styles.userPinAvatarFallback}>
+            <Text style={styles.userPinAvatarInitials}>{initials}</Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+});
+
+const ClusterMarker = React.memo(function ClusterMarker({
+  avatars,
+  count,
+}: {
+  avatars: MarkerAvatarData[];
+  count: number;
+}) {
+  return (
+    <View style={styles.clusterPinMarker}>
+      <View style={styles.clusterAvatarFan}>
+        {avatars.slice(0, 3).map((avatar, index) => (
+          <View
+            key={`${avatar.userId}-${index}`}
+            style={[
+              styles.clusterAvatarRing,
+              index === 0
+                ? styles.clusterAvatarLeft
+                : index === 1
+                  ? styles.clusterAvatarCenter
+                  : styles.clusterAvatarRight,
+              { borderColor: avatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR },
+            ]}
+          >
+            {avatar.uri ? (
+              <Image source={{ uri: avatar.uri }} style={styles.clusterAvatarImage} />
+            ) : (
+              <View style={styles.clusterAvatarFallback}>
+                <Text style={styles.clusterAvatarInitials}>{avatar.initials}</Text>
+              </View>
+            )}
+          </View>
+        ))}
+      </View>
+      <View style={styles.clusterPinBase}>
+        {count > 3 ? <Text style={styles.clusterPinCount}>{count}</Text> : null}
+      </View>
+      <View style={styles.clusterPinTail} />
+    </View>
+  );
+});
+
 const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
   userId,
   coordinate,
@@ -123,9 +228,9 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
 }: AnimatedUserMarkerProps) {
   return (
     <MarkerAnimated
-      ref={(marker) => onRef(userId, marker)}
+      ref={(marker: any) => onRef(userId, marker)}
       coordinate={coordinate}
-      anchor={{ x: 0.5, y: 0.5 }}
+      anchor={{ x: 0.5, y: 1 }}
       title={title}
       description={description}
       zIndex={zIndex}
@@ -133,26 +238,12 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
       tracksViewChanges={tracksViewChanges}
       stopPropagation
     >
-      {markerUri ? (
-        <Image
-          source={{ uri: markerUri }}
-          style={[
-            styles.icon,
-            { opacity: fresh ? 1 : 0.45, borderColor: markerBorderColor },
-          ]}
-        />
-      ) : (
-        <View
-          style={[
-            styles.iconInitials,
-            { opacity: fresh ? 1 : 0.45, borderColor: markerBorderColor },
-          ]}
-        >
-          <Text style={{ color: "white", fontWeight: "700" }}>
-            {markerInitials}
-          </Text>
-        </View>
-      )}
+      <UserPinAvatar
+        uri={markerUri}
+        initials={markerInitials}
+        borderColor={markerBorderColor}
+        fresh={fresh}
+      />
     </MarkerAnimated>
   );
 });
@@ -1236,11 +1327,17 @@ export default function MapScreen() {
 
         {mapMarkers.map((item) => {
           if (item.type === "cluster") {
+            const clusterAvatars = item.members
+              .slice(0, 3)
+              .map((member) =>
+                getProfileMarkerAvatar(profilesById[member.userId], member.userId)
+              );
+
             return (
               <Marker
                 key={`cluster-mode-${clusterModeVersion}-${item.key}`}
                 coordinate={{ latitude: item.lat, longitude: item.lng }}
-                anchor={{ x: 0.5, y: 0.5 }}
+                anchor={{ x: 0.5, y: 1 }}
                 title="Nearby group"
                 description={`${item.count} people nearby`}
                 zIndex={1000}
@@ -1268,9 +1365,7 @@ export default function MapScreen() {
                   }
                 }}
               >
-                <View style={styles.clusterBubble}>
-                  <Text style={styles.clusterBubbleText}>{item.count}</Text>
-                </View>
+                <ClusterMarker avatars={clusterAvatars} count={item.count} />
               </Marker>
             );
           }
@@ -1278,23 +1373,14 @@ export default function MapScreen() {
           const { loc, adjLat, adjLng } = item;
           const p = profilesById[loc.user_id];
 
-          const markerName =
-            p?.display_name || p?.username || loc.user_id.slice(0, 8);
-
-          const markerInitials = markerName
-            .split(" ")
-            .map((x) => x[0])
-            .join("")
-            .slice(0, 2)
-            .toUpperCase();
+          const markerName = getProfileMarkerName(p, loc.user_id);
+          const markerAvatar = getProfileMarkerAvatar(p, loc.user_id);
 
           const fresh = isFresh(loc.updated_at, 2 * 60 * 1000);
           const lastSeen = formatLastSeen(loc.updated_at);
-          const markerUri = p?.photo_url ?? null;
-          const markerBorderColor =
-            p?.is_active_premium && p?.accent_color
-              ? p.accent_color
-              : DEFAULT_MARKER_BORDER_COLOR;
+          const markerUri = markerAvatar.uri;
+          const markerInitials = markerAvatar.initials;
+          const markerBorderColor = markerAvatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR;
 
           const animatedCoordinate = getOrCreateAnimatedUserCoordinate(
             loc.user_id,
