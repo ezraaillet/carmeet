@@ -65,6 +65,30 @@ const MEET_MARKER_Z_INDEX = 1000;
 const CLUSTER_MARKER_Z_INDEX = 1200;
 const FOCUS_ME_CAMERA_ZOOM = 17;
 
+
+type UserMarkerItem = {
+  type: "user";
+  loc: LiveLoc;
+  adjLat: number;
+  adjLng: number;
+};
+
+type ClusterMarkerItem = {
+  type: "cluster";
+  key: string;
+  lat: number;
+  lng: number;
+  count: number;
+  members: { userId: string; latitude: number; longitude: number }[];
+};
+
+type RenderedMapMarker = UserMarkerItem | ClusterMarkerItem;
+
+type MeetMarkerItem = ReturnType<typeof useMapData>["meets"][number] & {
+  latitude: number;
+  longitude: number;
+};
+
 type MarkerAvatarData = {
   userId: string;
   uri: string | null;
@@ -265,6 +289,162 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
         fresh={fresh}
       />
     </MarkerAnimated>
+  );
+});
+
+const UserMarkerLayer = React.memo(function UserMarkerLayer({
+  userMarkerItems,
+  profilesById,
+  effectiveMyUserId,
+  clusterModeVersion,
+  getOrCreateAnimatedUserCoordinate,
+  onUserMarkerPress,
+  onUserMarkerRef,
+}: {
+  userMarkerItems: UserMarkerItem[];
+  profilesById: Record<string, Profile>;
+  effectiveMyUserId: string | null | undefined;
+  clusterModeVersion: number;
+  getOrCreateAnimatedUserCoordinate: (
+    userId: string,
+    latitude: number,
+    longitude: number
+  ) => AnimatedRegion;
+  onUserMarkerPress: (userId: string) => void;
+  onUserMarkerRef: (userId: string, marker: any) => void;
+}) {
+  return (
+    <>
+      {userMarkerItems.map((item) => {
+        const { loc, adjLat, adjLng } = item;
+        const p = profilesById[loc.user_id];
+
+        const markerName = getProfileMarkerName(p, loc.user_id);
+        const markerAvatar = getProfileMarkerAvatar(p, loc.user_id);
+
+        const fresh = isFresh(loc.updated_at, 2 * 60 * 1000);
+        const lastSeen = formatLastSeen(loc.updated_at);
+        const markerUri = markerAvatar.uri;
+        const markerInitials = markerAvatar.initials;
+        const markerBorderColor = markerAvatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR;
+
+        const animatedCoordinate = getOrCreateAnimatedUserCoordinate(
+          loc.user_id,
+          adjLat,
+          adjLng
+        );
+
+        return (
+          <AnimatedUserMarker
+            key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
+            userId={loc.user_id}
+            zIndex={loc.user_id === effectiveMyUserId ? MY_USER_MARKER_Z_INDEX : OTHER_USER_MARKER_Z_INDEX}
+            coordinate={animatedCoordinate}
+            title={markerName}
+            description={fresh ? "Live" : `Last seen ${lastSeen}`}
+            fresh={fresh}
+            markerUri={markerUri}
+            markerInitials={markerInitials}
+            markerBorderColor={markerBorderColor}
+            onPress={onUserMarkerPress}
+            onRef={onUserMarkerRef}
+          />
+        );
+      })}
+    </>
+  );
+});
+
+const MeetMarkerLayer = React.memo(function MeetMarkerLayer({
+  showMeetPins,
+  meetMarkers,
+  selectedMeetId,
+  onMeetMarkerPress,
+}: {
+  showMeetPins: boolean;
+  meetMarkers: MeetMarkerItem[];
+  selectedMeetId: string | null;
+  onMeetMarkerPress: (meetId: string) => void;
+}) {
+  if (!showMeetPins) return null;
+
+  return (
+    <>
+      {meetMarkers.map((meet) => {
+        const isSelected = meet.id === selectedMeetId;
+
+        return (
+          <Marker
+            key={`meet-${meet.id}`}
+            coordinate={{ latitude: meet.latitude, longitude: meet.longitude }}
+            zIndex={MEET_MARKER_Z_INDEX}
+            onPress={(event) => {
+              event.stopPropagation?.();
+              onMeetMarkerPress(meet.id);
+            }}
+            stopPropagation
+          >
+            <View style={[styles.meetMarkerWrap, isSelected ? styles.meetMarkerWrapSelected : null]}>
+              <Text style={styles.meetMarkerIcon}>📍</Text>
+            </View>
+          </Marker>
+        );
+      })}
+    </>
+  );
+});
+
+const ClusterMarkerLayer = React.memo(function ClusterMarkerLayer({
+  clusterMarkerItems,
+  profilesById,
+  currentUserLocation,
+  clusterModeVersion,
+  onClusterMarkerPress,
+}: {
+  clusterMarkerItems: ClusterMarkerItem[];
+  profilesById: Record<string, Profile>;
+  currentUserLocation: LiveLoc | null;
+  clusterModeVersion: number;
+  onClusterMarkerPress: (item: ClusterMarkerItem) => void;
+}) {
+  return (
+    <>
+      {clusterMarkerItems.map((item) => {
+        const offsetAboveCurrentUser = currentUserLocation
+          ? distanceBetweenCoordsMeters(
+              { latitude: item.lat, longitude: item.lng },
+              { latitude: currentUserLocation.lat, longitude: currentUserLocation.lng }
+            ) <= CLUSTER_CURRENT_USER_OVERLAP_THRESHOLD_METERS
+          : false;
+        const clusterAvatars = item.members
+          .slice(0, 3)
+          .map((member) =>
+            getProfileMarkerAvatar(profilesById[member.userId], member.userId)
+          );
+
+        return (
+          <Marker
+            key={`cluster-mode-${clusterModeVersion}-${item.key}`}
+            coordinate={{ latitude: item.lat, longitude: item.lng }}
+            anchor={{ x: 0.5, y: 1 }}
+            title="Nearby group"
+            description={`${item.count} people nearby`}
+            zIndex={CLUSTER_MARKER_Z_INDEX}
+            onPress={(event) => {
+              event.stopPropagation?.();
+              onClusterMarkerPress(item);
+            }}
+            stopPropagation
+          >
+            <ClusterMarker
+              avatars={clusterAvatars}
+              count={item.count}
+              offsetAboveCurrentUser={offsetAboveCurrentUser}
+            />
+          </Marker>
+        );
+      })}
+    </>
   );
 });
 
@@ -680,22 +860,7 @@ export default function MapScreen() {
       groups.push(group);
     }
 
-    const renderedMarkers: (
-      | {
-          type: "user";
-          loc: LiveLoc;
-          adjLat: number;
-          adjLng: number;
-        }
-      | {
-          type: "cluster";
-          key: string;
-          lat: number;
-          lng: number;
-          count: number;
-          members: { userId: string; latitude: number; longitude: number }[];
-        }
-    )[] = [];
+    const renderedMarkers: RenderedMapMarker[] = [];
     const individualLocations: LiveLoc[] = [...alwaysRenderedLocations];
 
     groups.forEach((group, groupIdx) => {
@@ -800,18 +965,11 @@ export default function MapScreen() {
 
   useEffect(() => {
     const renderedUserIds = mapMarkers
-      .filter((item): item is { type: "user"; loc: LiveLoc; adjLat: number; adjLng: number } => item.type === "user")
+      .filter((item): item is UserMarkerItem => item.type === "user")
       .map((item) => item.loc.user_id);
 
     const renderedClusterMemberIds = mapMarkers
-      .filter((item): item is {
-        type: "cluster";
-        key: string;
-        lat: number;
-        lng: number;
-        count: number;
-        members: { userId: string; latitude: number; longitude: number }[];
-      } => item.type === "cluster")
+      .filter((item): item is ClusterMarkerItem => item.type === "cluster")
       .flatMap((item) => item.members.map((member) => member.userId));
 
     const allRenderedIds = new Set([
@@ -931,14 +1089,7 @@ export default function MapScreen() {
   const userMarkerItems = useMemo(
     () =>
       mapMarkers.filter(
-        (
-          item
-        ): item is {
-          type: "user";
-          loc: LiveLoc;
-          adjLat: number;
-          adjLng: number;
-        } => item.type === "user"
+        (item): item is UserMarkerItem => item.type === "user"
       ),
     [mapMarkers]
   );
@@ -946,16 +1097,7 @@ export default function MapScreen() {
   const clusterMarkerItems = useMemo(
     () =>
       mapMarkers.filter(
-        (
-          item
-        ): item is {
-          type: "cluster";
-          key: string;
-          lat: number;
-          lng: number;
-          count: number;
-          members: { userId: string; latitude: number; longitude: number }[];
-        } => item.type === "cluster"
+        (item): item is ClusterMarkerItem => item.type === "cluster"
       ),
     [mapMarkers]
   );
@@ -1312,6 +1454,50 @@ export default function MapScreen() {
     }
   }, [myUserId, selectedUserId, canUseProfileGatedActions, friendRelationshipState]);
 
+  const handleUserMarkerRef = useCallback((userId: string, marker: any) => {
+    markerRefs.current[userId] = marker;
+  }, []);
+
+  const handleMeetMarkerPress = useCallback((meetId: string) => {
+    setSelectedUserId(null);
+    setSelectedProfile(null);
+    setProfileError(null);
+    setProfileLoading(false);
+    setSelectedUserCars([]);
+    setFriendRelationshipState("none");
+    setSelectedMeetId(meetId);
+  }, []);
+
+  const handleClusterMarkerPress = useCallback((item: ClusterMarkerItem) => {
+    setSelectedUserId(null);
+    setSelectedProfile(null);
+    setProfileError(null);
+    setProfileLoading(false);
+    setSelectedUserCars([]);
+    setFriendRelationshipState("none");
+    setSelectedMeetId(null);
+    setFocusedClusterKey(item.key);
+
+    if (mapRef.current) {
+      isProgrammaticCameraMoveRef.current = true;
+      mapRef.current.fitToCoordinates(
+        item.members.map((member) => ({
+          latitude: member.latitude,
+          longitude: member.longitude,
+        })),
+        {
+          edgePadding: {
+            top: 110,
+            right: 110,
+            bottom: 110,
+            left: 110,
+          },
+          animated: true,
+        }
+      );
+    }
+  }, []);
+
   if (checkingAuth) {
     return (
       <View style={styles.center}>
@@ -1410,117 +1596,30 @@ export default function MapScreen() {
         initialRegion={region}
         onRegionChangeComplete={handleRegionChangeComplete}
       >
-        {userMarkerItems.map((item) => {
-          const { loc, adjLat, adjLng } = item;
-          const p = profilesById[loc.user_id];
+        <UserMarkerLayer
+          userMarkerItems={userMarkerItems}
+          profilesById={profilesById}
+          effectiveMyUserId={effectiveMyUserId}
+          clusterModeVersion={clusterModeVersion}
+          getOrCreateAnimatedUserCoordinate={getOrCreateAnimatedUserCoordinate}
+          onUserMarkerPress={handleMarkerPress}
+          onUserMarkerRef={handleUserMarkerRef}
+        />
 
-          const markerName = getProfileMarkerName(p, loc.user_id);
-          const markerAvatar = getProfileMarkerAvatar(p, loc.user_id);
+        <MeetMarkerLayer
+          showMeetPins={showMeetPins}
+          meetMarkers={meetMarkers}
+          selectedMeetId={selectedMeetId}
+          onMeetMarkerPress={handleMeetMarkerPress}
+        />
 
-          const fresh = isFresh(loc.updated_at, 2 * 60 * 1000);
-          const lastSeen = formatLastSeen(loc.updated_at);
-          const markerUri = markerAvatar.uri;
-          const markerInitials = markerAvatar.initials;
-          const markerBorderColor = markerAvatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR;
-
-          const animatedCoordinate = getOrCreateAnimatedUserCoordinate(
-            loc.user_id,
-            adjLat,
-            adjLng
-          );
-
-          return (
-            <AnimatedUserMarker
-              key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
-              userId={loc.user_id}
-              zIndex={loc.user_id === effectiveMyUserId ? MY_USER_MARKER_Z_INDEX : OTHER_USER_MARKER_Z_INDEX}
-              coordinate={animatedCoordinate}
-              title={markerName}
-              description={fresh ? "Live" : `Last seen ${lastSeen}`}
-              fresh={fresh}
-              markerUri={markerUri}
-              markerInitials={markerInitials}
-              markerBorderColor={markerBorderColor}
-              onPress={handleMarkerPress}
-              onRef={(userId, marker) => {
-                markerRefs.current[userId] = marker;
-              }}
-            />
-          );
-        })}
-
-        {showMeetPins && meetMarkers.map((meet) => (
-          <Marker
-            key={`meet-${meet.id}`}
-            coordinate={{ latitude: meet.latitude, longitude: meet.longitude }}
-            title={meet.title || "Meet"}
-            description={meet.location_name || "Car meet"}
-            zIndex={MEET_MARKER_Z_INDEX}
-            onPress={() => {
-              closeProfileCard();
-              setSelectedMeetId(meet.id);
-            }}
-          >
-            <View style={styles.meetMarkerWrap}>
-              <Text style={styles.meetMarkerIcon}>📍</Text>
-            </View>
-          </Marker>
-        ))}
-
-        {clusterMarkerItems.map((item) => {
-          const offsetAboveCurrentUser = currentUserLocation
-            ? distanceBetweenCoordsMeters(
-                { latitude: item.lat, longitude: item.lng },
-                { latitude: currentUserLocation.lat, longitude: currentUserLocation.lng }
-              ) <= CLUSTER_CURRENT_USER_OVERLAP_THRESHOLD_METERS
-            : false;
-          const clusterAvatars = item.members
-            .slice(0, 3)
-            .map((member) =>
-              getProfileMarkerAvatar(profilesById[member.userId], member.userId)
-            );
-
-          return (
-            <Marker
-              key={`cluster-mode-${clusterModeVersion}-${item.key}`}
-              coordinate={{ latitude: item.lat, longitude: item.lng }}
-              anchor={{ x: 0.5, y: 1 }}
-              title="Nearby group"
-              description={`${item.count} people nearby`}
-              zIndex={CLUSTER_MARKER_Z_INDEX}
-              onPress={() => {
-                closeProfileCard();
-                setSelectedMeetId(null);
-                setFocusedClusterKey(item.key);
-                if (mapRef.current) {
-                  isProgrammaticCameraMoveRef.current = true;
-                  mapRef.current.fitToCoordinates(
-                    item.members.map((member) => ({
-                      latitude: member.latitude,
-                      longitude: member.longitude,
-                    })),
-                    {
-                      edgePadding: {
-                        top: 110,
-                        right: 110,
-                        bottom: 110,
-                        left: 110,
-                      },
-                      animated: true,
-                    }
-                  );
-                }
-              }}
-              stopPropagation
-            >
-              <ClusterMarker
-                avatars={clusterAvatars}
-                count={item.count}
-                offsetAboveCurrentUser={offsetAboveCurrentUser}
-              />
-            </Marker>
-          );
-        })}
+        <ClusterMarkerLayer
+          clusterMarkerItems={clusterMarkerItems}
+          profilesById={profilesById}
+          currentUserLocation={currentUserLocation}
+          clusterModeVersion={clusterModeVersion}
+          onClusterMarkerPress={handleClusterMarkerPress}
+        />
       </MapView>
 
       <Animated.View
