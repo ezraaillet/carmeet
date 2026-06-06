@@ -54,6 +54,7 @@ const MARKER_SNAP_THRESHOLD_METERS = 350;
 const MARKER_ANIMATION_DURATION_MS = 900;
 const OVERLAP_THRESHOLD_METERS = 1.5;
 const OVERLAP_SPREAD_RADIUS_METERS = 7;
+const CLUSTER_CURRENT_USER_OVERLAP_THRESHOLD_METERS = 18;
 const CLUSTER_MIN_SIZE = 4;
 const CLUSTER_MAX_ZOOM_LATITUDE_DELTA = 0.012;
 const DEFAULT_MARKER_BORDER_COLOR = colors.primary;
@@ -178,13 +179,26 @@ const UserPinAvatar = React.memo(function UserPinAvatar({
 const ClusterMarker = React.memo(function ClusterMarker({
   avatars,
   count,
+  offsetAboveCurrentUser = false,
 }: {
   avatars: MarkerAvatarData[];
   count: number;
+  offsetAboveCurrentUser?: boolean;
 }) {
   return (
-    <View style={styles.clusterPinMarker}>
-      <View style={styles.clusterAvatarFan}>
+    <View
+      style={[
+        styles.clusterPinMarker,
+        offsetAboveCurrentUser ? styles.clusterPinMarkerOffsetAboveUser : null,
+      ]}
+    >
+      {offsetAboveCurrentUser ? <View style={styles.clusterPinMarkerAnchorTail} /> : null}
+      <View
+        style={[
+          styles.clusterAvatarFan,
+          offsetAboveCurrentUser ? styles.clusterAvatarFanOffsetAboveUser : null,
+        ]}
+      >
         {avatars.slice(0, 3).map((avatar, index) => (
           <View
             key={`${avatar.userId}-${index}`}
@@ -944,6 +958,15 @@ export default function MapScreen() {
     [mapMarkers]
   );
 
+  const currentUserLocation = useMemo(() => {
+    if (!effectiveMyUserId) return null;
+
+    const loc = locationsById[effectiveMyUserId];
+    if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) return null;
+
+    return loc;
+  }, [effectiveMyUserId, locationsById]);
+
   const getOrCreateAnimatedUserCoordinate = useCallback(
     (userId: string, latitude: number, longitude: number) => {
       let coord = animatedUserCoordsRef.current[userId];
@@ -1387,6 +1410,12 @@ export default function MapScreen() {
         ))}
 
         {clusterMarkerItems.map((item) => {
+          const offsetAboveCurrentUser = currentUserLocation
+            ? distanceBetweenCoordsMeters(
+                { latitude: item.lat, longitude: item.lng },
+                { latitude: currentUserLocation.lat, longitude: currentUserLocation.lng }
+              ) <= CLUSTER_CURRENT_USER_OVERLAP_THRESHOLD_METERS
+            : false;
           const clusterAvatars = item.members
             .slice(0, 3)
             .map((member) =>
@@ -1426,7 +1455,11 @@ export default function MapScreen() {
               }}
               stopPropagation
             >
-              <ClusterMarker avatars={clusterAvatars} count={item.count} />
+              <ClusterMarker
+                avatars={clusterAvatars}
+                count={item.count}
+                offsetAboveCurrentUser={offsetAboveCurrentUser}
+              />
             </Marker>
           );
         })}

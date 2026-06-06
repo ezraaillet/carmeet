@@ -199,11 +199,32 @@ const mapStyles = StyleSheet.create({
     alignItems: "center",
     overflow: "visible",
   },
+  clusterPinMarkerOffsetAboveUser: {
+    height: 106,
+    paddingTop: 56,
+  },
+  clusterPinMarkerAnchorTail: {
+    position: "absolute",
+    bottom: 0,
+    width: 2,
+    height: 64,
+    borderRadius: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.82)",
+    shadowColor: "#000",
+    shadowOpacity: 0.28,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+    zIndex: 1,
+  },
   clusterAvatarFan: {
     width: 72,
     height: 42,
     zIndex: 3,
     overflow: "visible",
+  },
+  clusterAvatarFanOffsetAboveUser: {
+    transform: [{ translateY: -56 }],
   },
   clusterAvatarRing: {
     position: "absolute",
