@@ -256,6 +256,10 @@ function RootLayoutInner() {
             name="profile"
             options={{ title: "Profile", tabBarLabel: "Profile" }}
           />
+          <Tabs.Screen
+            name="edit-profile"
+            options={{ href: null, title: "Edit Profile" }}
+          />
         </Tabs>
 
         <NotificationsOverlay

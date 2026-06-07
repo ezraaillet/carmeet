@@ -426,6 +426,99 @@ const profileStyles = StyleSheet.create({
       "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.72) 62%, #000 100%)",
   },
 
+
+  headerEditButton: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+
+  settingsContainer: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 40,
+    gap: 14,
+    backgroundColor: colors.black,
+  },
+
+  editScreenHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 4,
+  },
+
+  backButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.gunmetal,
+  },
+
+  editScreenTitle: {
+    color: colors.offwhite,
+    fontSize: 24,
+    fontWeight: "800",
+  },
+
+  editScreenSubtitle: {
+    color: colors.silver,
+    marginTop: 2,
+  },
+
+  settingsSectionCard: {
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: colors.charcoal,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+  },
+
+  bannerPreview: {
+    width: "100%",
+    height: 124,
+    borderRadius: 10,
+    marginBottom: 10,
+    backgroundColor: colors.gunmetal,
+  },
+
+  settingsHelperText: {
+    marginTop: 8,
+  },
+
+  signOutWrap: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.gunmetal,
+  },
+
+  signOutButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    paddingVertical: 13,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+  },
+
+  signOutButtonText: {
+    color: colors.primary,
+    fontWeight: "800",
+  },
+
   carActionsRow: {
     flexDirection: "row",
     gap: 8,
