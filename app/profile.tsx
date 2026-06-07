@@ -19,7 +19,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import s from "@/styles/profilestyles";
 import { supabase } from "../database/supabase";
 import { useMapData } from "@/components/MapDataProvider";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   ensureMinimalProfileExists,
@@ -72,17 +72,6 @@ type ProfileCustomizationRow = {
 };
 
 const DEFAULT_ACCENT_COLOR = "#ef4444";
-const ACCENT_COLOR_PRESETS = [
-  "#ef4444",
-  "#dc2626",
-  "#f97316",
-  "#eab308",
-  "#22c55e",
-  "#06b6d4",
-  "#3b82f6",
-  "#a855f7",
-];
-
 export default function ProfileScreen() {
   const params = useLocalSearchParams<{ onboarding?: string }>();
 
@@ -99,7 +88,6 @@ export default function ProfileScreen() {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [locationVis, setLocationVis] = useState("everyone");
   const [bio, setBio] = useState("");
   const [instagramHandle, setInstagramHandle] = useState("");
   const [tiktokHandle, setTiktokHandle] = useState("");
@@ -127,15 +115,10 @@ export default function ProfileScreen() {
   const [deletingCarId, setDeletingCarId] = useState<string | null>(null);
   const [membership, setMembership] = useState<MembershipRow | null>(null);
   const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT_COLOR);
-  const [customizationLoading, setCustomizationLoading] = useState(false);
-  const [customizationSavingColor, setCustomizationSavingColor] = useState<string | null>(null);
   const [goingMeets, setGoingMeets] = useState<any[]>([]);
   const [meetsLoading, setMeetsLoading] = useState(false);
   const [meetsError, setMeetsError] = useState<string | null>(null);
-
-  const [editing, setEditing] = useState(false);
   const [loadingLocal, setLoadingLocal] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const initials = useMemo(() => {
@@ -191,7 +174,6 @@ export default function ProfileScreen() {
           setUsername(cached.username ?? "");
           setDisplayName(cached.display_name ?? "");
           setPhotoUrl(cached.photo_url ?? null);
-          setLocationVis(cached.location_visibility ?? "everyone");
           setBio(cached.bio ?? "");
           setBannerUrl(cached.banner_url ?? null);
           setInstagramHandle(cached.instagram_handle ?? "");
@@ -217,7 +199,6 @@ export default function ProfileScreen() {
         setUsername(row.username ?? "");
         setDisplayName(row.display_name ?? "");
         setPhotoUrl(row.photo_url ?? null);
-        setLocationVis(row.location_visibility ?? "everyone");
         setBio(row.bio ?? "");
         setBannerUrl(row.banner_url ?? null);
         setInstagramHandle(row.instagram_handle ?? "");
@@ -248,7 +229,7 @@ export default function ProfileScreen() {
       params.onboarding === "1" || !hasMapProfileData(profile);
 
     if (shouldForceEdit) {
-      setEditing(true);
+      router.push("/edit-profile");
     }
   }, [params.onboarding, profile]);
 
@@ -340,18 +321,12 @@ export default function ProfileScreen() {
     void loadMembership();
   }, [myUserId, loadMembership]);
 
-  useEffect(() => {
-    if (activeTab !== "membership") return;
-    void loadMembership();
-  }, [activeTab, loadMembership]);
-
   const loadCustomization = useCallback(async () => {
     if (!myUserId) {
       setAccentColor(DEFAULT_ACCENT_COLOR);
       return;
     }
 
-    setCustomizationLoading(true);
     const { data, error: loadErr } = await supabase
       .from("profile_customizations")
       .select("user_id, accent_color")
@@ -359,12 +334,10 @@ export default function ProfileScreen() {
       .maybeSingle<ProfileCustomizationRow>();
 
     if (loadErr) {
-      setCustomizationLoading(false);
       return;
     }
 
     setAccentColor(data?.accent_color || DEFAULT_ACCENT_COLOR);
-    setCustomizationLoading(false);
   }, [myUserId]);
 
   useEffect(() => {
@@ -375,40 +348,6 @@ export default function ProfileScreen() {
   // -----------------------------
   // Pick + upload avatar
   // -----------------------------
-  async function pickImage() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (perm.status !== "granted") {
-      Alert.alert("Permission needed", "We need access to your photos.");
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: "images",
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.9,
-    });
-
-    if (result.canceled) return;
-
-    const asset = result.assets[0];
-
-    try {
-      const uploadedUrl = await uploadAvatar(asset);
-      setPhotoUrl(uploadedUrl);
-    } catch (e: any) {
-      Alert.alert("Upload failed", e?.message ?? "Unknown error");
-    }
-  }
-
-  async function uploadAvatar(
-    asset: ImagePicker.ImagePickerAsset
-  ): Promise<string> {
-    if (!myUserId) throw new Error("No user id");
-
-    return uploadImageToStorage(asset, "avatars", `${myUserId}`);
-  }
-
   async function uploadImageToStorage(
     asset: ImagePicker.ImagePickerAsset,
     bucket: string,
@@ -498,78 +437,6 @@ export default function ProfileScreen() {
       setCarPhotoUploading(false);
     }
   }
-
-  // -----------------------------
-  // Editing state
-  // -----------------------------
-  function cancelEditing() {
-    if (profile) {
-      setUsername(profile.username ?? "");
-      setDisplayName(profile.display_name ?? "");
-      setPhotoUrl(profile.photo_url ?? null);
-      setLocationVis(profile.location_visibility ?? "everyone");
-      setBio(profile.bio ?? "");
-      setInstagramHandle(profile.instagram_handle ?? "");
-      setTiktokHandle(profile.tiktok_handle ?? "");
-      setTwitterHandle(profile.twitter_handle ?? "");
-      setSnapchatHandle(profile.snapchat_handle ?? "");
-      setCity(profile.city ?? null);
-      setState(profile.state ?? null);
-    }
-    setEditing(false);
-  }
-
-  async function saveProfile() {
-    if (!myUserId) return;
-
-    setSaving(true);
-    setError(null);
-
-    const payload = {
-      username: username.trim() || null,
-      display_name: displayName.trim() || null,
-      photo_url: photoUrl || null,
-      location_visibility: locationVis || null,
-      bio: bio.trim() || null,
-      instagram_handle: instagramHandle.trim() || null,
-      tiktok_handle: tiktokHandle.trim() || null,
-      twitter_handle: twitterHandle.trim() || null,
-      snapchat_handle: snapchatHandle.trim() || null,
-      onboarded: true,
-    };
-
-    const { data, error: upErr } = await supabase
-      .from("profiles")
-      .update(payload)
-      .eq("id", myUserId)
-      .select("*")
-      .single<ProfileRow>();
-
-    if (upErr) {
-      setError(upErr.message);
-      setSaving(false);
-      return;
-    }
-
-    // Update local immediately
-    setProfile(data);
-    setBio(data.bio ?? "");
-    setBannerUrl(data.banner_url ?? null);
-    setInstagramHandle(data.instagram_handle ?? "");
-    setTiktokHandle(data.tiktok_handle ?? "");
-    setTwitterHandle(data.twitter_handle ?? "");
-    setSnapchatHandle(data.snapchat_handle ?? "");
-    setCity(data.city ?? null);
-    setState(data.state ?? null);
-    setEditing(false);
-
-    // Refresh provider cache so Map markers/cards use new photo/name immediately
-    await refresh(myUserId);
-
-
-    setSaving(false);
-  }
-
 
   function resetAddCarForm() {
     setCarYear("");
@@ -727,30 +594,6 @@ export default function ProfileScreen() {
   };
   void hiddenCarCrudState;
   const appliedAccentColor = isPremium ? accentColor : DEFAULT_ACCENT_COLOR;
-
-  async function saveAccentColor(nextColor: string) {
-    if (!myUserId || !isPremium) return;
-    setCustomizationSavingColor(nextColor);
-
-    const { error: upsertErr } = await supabase
-      .from("profile_customizations")
-      .upsert(
-        {
-          user_id: myUserId,
-          accent_color: nextColor,
-        },
-        { onConflict: "user_id" }
-      );
-
-    if (upsertErr) {
-      Alert.alert("Could not save color", upsertErr.message);
-      setCustomizationSavingColor(null);
-      return;
-    }
-
-    setAccentColor(nextColor);
-    setCustomizationSavingColor(null);
-  }
 
   function renderTabButton(label: string, tab: ProfileTab) {
     const selected = activeTab === tab;
@@ -1003,220 +846,6 @@ export default function ProfileScreen() {
     );
   }
 
-  function renderSettingsSection() {
-    return (
-      <View style={s.sectionCard}>
-        <Text style={s.sectionTitle}>Settings</Text>
-        <View style={s.field}>
-          <Text style={s.label}>Profile photo</Text>
-          <View style={s.settingsPhotoRow}>
-            <View style={[s.settingsPhotoWrap, { borderColor: appliedAccentColor }]}>
-              {photoUrl ? (
-                <Image source={{ uri: photoUrl }} style={s.settingsPhotoPreview} />
-              ) : (
-                <View style={[s.settingsPhotoPreview, s.avatarFallback]}>
-                  <Text style={s.avatarInitials}>{initials || "?"}</Text>
-                </View>
-              )}
-            </View>
-            {editing ? (
-              <Pressable onPress={pickImage} style={s.secondaryBtn}>
-                <Text style={s.secondaryBtnText}>Change photo</Text>
-              </Pressable>
-            ) : (
-              <Text style={s.placeholderText}>Tap Start Editing to change your photo.</Text>
-            )}
-          </View>
-        </View>
-
-        {/* Username */}
-        <View style={s.field}>
-          <Text style={s.label}>Username</Text>
-          <TextInput
-            value={username}
-            onChangeText={setUsername}
-            placeholder="username"
-            editable={editing}
-            style={[s.input, !editing && s.inputDisabled]}
-          />
-        </View>
-
-        {/* Display Name */}
-        <View style={s.field}>
-          <Text style={s.label}>Display name</Text>
-          <TextInput
-            value={displayName}
-            onChangeText={setDisplayName}
-            placeholder="Your name"
-            editable={editing}
-            style={[s.input, !editing && s.inputDisabled]}
-          />
-        </View>
-
-        {/* Bio */}
-        <View style={s.field}>
-          <Text style={s.label}>Bio</Text>
-          <TextInput
-            value={bio}
-            onChangeText={setBio}
-            placeholder="Tell people about yourself"
-            editable={editing}
-            multiline
-            style={[s.input, s.textarea, !editing && s.inputDisabled]}
-          />
-        </View>
-
-        {/* Location Visibility */}
-        <View style={s.field}>
-          <Text style={s.label}>Location visibility</Text>
-
-          {!editing ? (
-            <View style={s.readonlyBox}>
-              <Text style={s.readonlyText}>{locationVis || "everyone"}</Text>
-            </View>
-          ) : (
-            <View style={s.locationRow}>
-              {["everyone", "friends", "nobody"].map((val) => {
-                const selected = locationVis === val;
-                return (
-                  <Pressable
-                    key={val}
-                    onPress={() => setLocationVis(val)}
-                    style={[
-                      s.locationOption,
-                      selected && s.locationOptionSelected,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        s.locationOptionText,
-                        selected && s.locationOptionTextSelected,
-                      ]}
-                    >
-                      {val}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          )}
-        </View>
-
-        <View style={s.field}>
-          <Text style={s.label}>Profile outline color</Text>
-          {isPremium ? (
-            <View style={s.accentPickerRow}>
-              {ACCENT_COLOR_PRESETS.map((color) => {
-                const selected = accentColor === color;
-                const savingThis = customizationSavingColor === color;
-                return (
-                  <Pressable
-                    key={color}
-                    disabled={savingThis || customizationLoading}
-                    onPress={() => {
-                      void saveAccentColor(color);
-                    }}
-                    style={[
-                      s.accentSwatch,
-                      { backgroundColor: color },
-                      selected && s.accentSwatchSelected,
-                      (savingThis || customizationLoading) && { opacity: 0.7 },
-                    ]}
-                  >
-                    {selected ? <Text style={s.accentSwatchCheck}>✓</Text> : null}
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : (
-            <Text style={s.placeholderText}>
-              Premium unlocks custom profile outline colors.
-            </Text>
-          )}
-        </View>
-
-        <View style={s.field}>
-          <Text style={s.label}>Social handles</Text>
-          {isPremium ? (
-            <>
-              <TextInput
-                value={instagramHandle}
-                onChangeText={setInstagramHandle}
-                placeholder="Instagram handle"
-                editable={editing}
-                style={[s.input, !editing && s.inputDisabled]}
-                autoCapitalize="none"
-                placeholderTextColor="#9ca3af"
-              />
-              <TextInput
-                value={tiktokHandle}
-                onChangeText={setTiktokHandle}
-                placeholder="TikTok handle"
-                editable={editing}
-                style={[s.input, s.socialInput, !editing && s.inputDisabled]}
-                autoCapitalize="none"
-                placeholderTextColor="#9ca3af"
-              />
-              <TextInput
-                value={twitterHandle}
-                onChangeText={setTwitterHandle}
-                placeholder="Twitter/X handle"
-                editable={editing}
-                style={[s.input, s.socialInput, !editing && s.inputDisabled]}
-                autoCapitalize="none"
-                placeholderTextColor="#9ca3af"
-              />
-              <TextInput
-                value={snapchatHandle}
-                onChangeText={setSnapchatHandle}
-                placeholder="Snapchat handle"
-                editable={editing}
-                style={[s.input, s.socialInput, !editing && s.inputDisabled]}
-                autoCapitalize="none"
-                placeholderTextColor="#9ca3af"
-              />
-            </>
-          ) : (
-            <Text style={s.placeholderText}>
-              Premium required to add social handles. Upgrade to unlock this section.
-            </Text>
-          )}
-        </View>
-
-        {error ? <Text style={s.error}>{error}</Text> : null}
-
-        <View style={s.btnRow}>
-          {!editing ? (
-            <Pressable
-              onPress={() => setEditing(true)}
-              style={s.primaryBtn}
-            >
-              <Text style={s.primaryBtnText}>Start Editing</Text>
-            </Pressable>
-          ) : (
-            <>
-              <Pressable
-                onPress={saveProfile}
-                disabled={saving}
-                style={[s.primaryBtn, saving && { opacity: 0.7 }]}
-              >
-                {saving ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Text style={s.primaryBtnText}>Save</Text>
-                )}
-              </Pressable>
-
-              <Pressable onPress={cancelEditing} style={s.secondaryBtn}>
-                <Text style={s.secondaryBtnText}>Cancel</Text>
-              </Pressable>
-            </>
-          )}
-        </View>
-      </View>
-    );
-  }
-
   // -----------------------------
   // UI
   // -----------------------------
@@ -1260,6 +889,17 @@ export default function ProfileScreen() {
             style={s.bannerImage}
           />
           <View style={s.bannerFadeOverlay} pointerEvents="none" />
+          {myUserId === profile.id ? (
+            <Pressable
+              onPress={() => router.push("/edit-profile")}
+              style={s.headerEditButton}
+              accessibilityRole="button"
+              accessibilityLabel="Edit profile"
+              hitSlop={8}
+            >
+              <MaterialCommunityIcons name="pencil" size={18} color="#fff" />
+            </Pressable>
+          ) : null}
         </View>
         <View style={s.headerTextWrap}>
           <View style={s.heroIdentityRow}>
@@ -1326,7 +966,6 @@ export default function ProfileScreen() {
 
         {activeTab === "cars" && renderCarsSection()}
         {activeTab === "meets" && renderMeetsSection()}
-        {editing ? renderSettingsSection() : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );
