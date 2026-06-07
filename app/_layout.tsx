@@ -150,8 +150,8 @@ function RootLayoutInner() {
     fetchPendingRequests();
   }
 
-  function redirectSignedOutTab(redirectTo: "/create" | "/profile") {
-    router.navigate(`/auth?redirectTo=${redirectTo}` as any);
+  function keepSignedOutUserOnMap() {
+    router.replace("/map");
   }
 
   function closeNotifications() {
@@ -259,7 +259,7 @@ function RootLayoutInner() {
               tabPress: (event) => {
                 if (userId) return;
                 event.preventDefault();
-                redirectSignedOutTab("/create");
+                keepSignedOutUserOnMap();
               },
             }}
           />
@@ -277,7 +277,7 @@ function RootLayoutInner() {
               tabPress: (event) => {
                 if (userId) return;
                 event.preventDefault();
-                redirectSignedOutTab("/profile");
+                keepSignedOutUserOnMap();
               },
             }}
           />

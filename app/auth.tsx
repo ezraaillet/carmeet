@@ -191,10 +191,6 @@ export default function AuthScreen() {
             <Text style={styles.authSubmitText}>{isSignUp ? "Create account" : "Sign in"}</Text>
           )}
         </Pressable>
-
-        <Pressable onPress={() => router.replace(returnPath as any)} style={styles.authSecondaryButton}>
-          <Text style={styles.authSecondaryText}>Back to {returnPath.replace("/", "") || "map"}</Text>
-        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
