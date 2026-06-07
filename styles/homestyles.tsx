@@ -803,6 +803,97 @@ const styles = StyleSheet.create({
   homeSecondaryBtnPressed: {
     opacity: 0.7,
   },
+
+  authScreen: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    backgroundColor: colors.black,
+  },
+  authCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: colors.charcoal,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    padding: 20,
+  },
+  authTitle: {
+    color: colors.primary,
+    fontSize: 28,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  authSubtitle: {
+    color: colors.silver,
+    fontSize: 15,
+    lineHeight: 21,
+    marginBottom: 18,
+  },
+  authModeRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  authModeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 999,
+    alignItems: "center",
+    backgroundColor: colors.gunmetal,
+  },
+  authModeButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  authModeText: {
+    color: colors.silver,
+    fontWeight: "700",
+  },
+  authModeTextActive: {
+    color: colors.offwhite,
+  },
+  authInput: {
+    backgroundColor: colors.black,
+    color: colors.offwhite,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+  },
+  authError: {
+    color: colors.error,
+    marginBottom: 10,
+  },
+  authMessage: {
+    color: colors.success,
+    marginBottom: 10,
+  },
+  authSubmitButton: {
+    marginTop: 4,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    alignItems: "center",
+    backgroundColor: colors.primary,
+  },
+  authSubmitText: {
+    color: colors.offwhite,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  authSecondaryButton: {
+    marginTop: 12,
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  authSecondaryText: {
+    color: colors.silver,
+    fontWeight: "600",
+  },
 });
 
 export default styles;

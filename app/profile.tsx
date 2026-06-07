@@ -849,6 +849,25 @@ export default function ProfileScreen() {
   // -----------------------------
   // UI
   // -----------------------------
+  if (!myUserId) {
+    return (
+      <View style={s.center}>
+        <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>
+          Sign in required
+        </Text>
+        <Text style={[s.placeholderText, { marginTop: 10, textAlign: "center", paddingHorizontal: 24 }]}>
+          Please sign in or create an account before viewing your profile.
+        </Text>
+        <Pressable
+          onPress={() => router.navigate("/auth?redirectTo=/profile")}
+          style={({ pressed }) => [s.primaryBtn, { marginTop: 16 }, pressed && { opacity: 0.85 }]}
+        >
+          <Text style={s.primaryBtnText}>Sign in or create account</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   if (loading) {
     return (
       <View style={s.center}>

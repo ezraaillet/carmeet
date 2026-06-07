@@ -236,7 +236,7 @@ function RootLayoutInner() {
               const name =
                 route.name === "map"
                   ? "map"
-                  : route.name === "index"
+                  : route.name === "create"
                   ? "add-circle"
                   : "person";
               return <Ionicons name={name as any} size={size} color={color} />;
@@ -245,12 +245,14 @@ function RootLayoutInner() {
         >
           <Tabs.Screen name="map" options={{ title: "Map", tabBarLabel: "Map" }} />
           <Tabs.Screen
-            name="index"
+            name="create"
             options={{
               title: "Create",
               tabBarLabel: "Create",
             }}
           />
+          <Tabs.Screen name="index" options={{ href: null }} />
+          <Tabs.Screen name="auth" options={{ href: null, title: "Sign In" }} />
 
           <Tabs.Screen
             name="profile"

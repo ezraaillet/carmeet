@@ -611,13 +611,6 @@ export default function MapScreen() {
   }, [authed, myUserId]);
 
   useEffect(() => {
-    if (checkingAuth) return;
-    if (!authed) {
-      router.navigate("/");
-    }
-  }, [checkingAuth, authed, router]);
-
-  useEffect(() => {
     (async () => {
       const fg = await Location.requestForegroundPermissionsAsync();
       if (fg.status !== "granted") {
@@ -1555,14 +1548,14 @@ export default function MapScreen() {
         </Text>
 
         <Pressable
-          onPress={() => router.navigate("/")}
+          onPress={() => router.navigate("/auth?redirectTo=/map")}
           style={({ pressed }) => [
             styles.friendBtn,
             { marginTop: 16, paddingHorizontal: 18 },
             pressed && { opacity: 0.85 },
           ]}
         >
-          <Text style={styles.friendBtnText}>Go to Home</Text>
+          <Text style={styles.friendBtnText}>Sign in or create account</Text>
         </Pressable>
       </View>
     );
