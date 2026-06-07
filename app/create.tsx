@@ -1,25 +1,36 @@
-import { Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { router } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback } from "react";
 
 import { useMapData } from "@/components/MapDataProvider";
+import { supabase } from "@/database/supabase";
 import styles from "@/styles/homestyles";
 
 export default function CreateScreen() {
   const { myUserId } = useMapData();
 
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      (async () => {
+        const { data } = await supabase.auth.getUser();
+        if (active && !data.user) {
+          router.replace("/auth?redirectTo=/create");
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
   if (!myUserId) {
     return (
       <View style={styles.createPlaceholderContainer}>
-        <Text style={styles.createPlaceholderTitle}>Sign in required</Text>
-        <Text style={styles.createPlaceholderSubtitle}>
-          Please sign in or create an account before creating a meet.
-        </Text>
-        <Pressable
-          onPress={() => router.navigate("/auth?redirectTo=/create")}
-          style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-        >
-          <Text style={styles.buttonText}>Sign in or create account</Text>
-        </Pressable>
+        <ActivityIndicator />
       </View>
     );
   }

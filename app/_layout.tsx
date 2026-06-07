@@ -1,6 +1,6 @@
 import { MapDataProvider, useMapData } from "@/components/MapDataProvider";
 import { Pressable, Text, View } from "react-native";
-import { Tabs } from "expo-router";
+import { Tabs, router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -150,6 +150,10 @@ function RootLayoutInner() {
     fetchPendingRequests();
   }
 
+  function redirectSignedOutTab(redirectTo: "/create" | "/profile") {
+    router.navigate(`/auth?redirectTo=${redirectTo}` as any);
+  }
+
   function closeNotifications() {
     setNotifOpen(false);
     setNotifError(null);
@@ -249,6 +253,14 @@ function RootLayoutInner() {
             options={{
               title: "Create",
               tabBarLabel: "Create",
+              tabBarItemStyle: !userId ? { opacity: 0.45 } : undefined,
+            }}
+            listeners={{
+              tabPress: (event) => {
+                if (userId) return;
+                event.preventDefault();
+                redirectSignedOutTab("/create");
+              },
             }}
           />
           <Tabs.Screen name="index" options={{ href: null }} />
@@ -256,7 +268,18 @@ function RootLayoutInner() {
 
           <Tabs.Screen
             name="profile"
-            options={{ title: "Profile", tabBarLabel: "Profile" }}
+            options={{
+              title: "Profile",
+              tabBarLabel: "Profile",
+              tabBarItemStyle: !userId ? { opacity: 0.45 } : undefined,
+            }}
+            listeners={{
+              tabPress: (event) => {
+                if (userId) return;
+                event.preventDefault();
+                redirectSignedOutTab("/profile");
+              },
+            }}
           />
           <Tabs.Screen
             name="edit-profile"

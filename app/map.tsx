@@ -1540,18 +1540,11 @@ export default function MapScreen() {
   if (!authed) {
     return (
       <View style={styles.center}>
-        <Text style={{ fontSize: 18, fontWeight: "700" }}>
-          Sign in required
-        </Text>
-        <Text style={{ marginTop: 10, textAlign: "center", opacity: 0.85 }}>
-          Please sign in or create an account before using the map.
-        </Text>
-
         <Pressable
           onPress={() => router.navigate("/auth?redirectTo=/map")}
           style={({ pressed }) => [
             styles.friendBtn,
-            { marginTop: 16, paddingHorizontal: 18 },
+            { paddingHorizontal: 18 },
             pressed && { opacity: 0.85 },
           ]}
         >
