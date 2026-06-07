@@ -399,12 +399,16 @@ const ClusterMarkerLayer = React.memo(function ClusterMarkerLayer({
   profilesById,
   currentUserLocation,
   clusterModeVersion,
+  clusterMarkerRedrawVersion,
+  clusterMarkersTrackViewChanges,
   onClusterMarkerPress,
 }: {
   clusterMarkerItems: ClusterMarkerItem[];
   profilesById: Record<string, Profile>;
   currentUserLocation: LiveLoc | null;
   clusterModeVersion: number;
+  clusterMarkerRedrawVersion: number;
+  clusterMarkersTrackViewChanges: boolean;
   onClusterMarkerPress: (item: ClusterMarkerItem) => void;
 }) {
   return (
@@ -422,14 +426,18 @@ const ClusterMarkerLayer = React.memo(function ClusterMarkerLayer({
             getProfileMarkerAvatar(profilesById[member.userId], member.userId)
           );
 
+        const clusterMarkerKey = `cluster-mode-${clusterModeVersion}-${clusterMarkerRedrawVersion}-${item.key}`;
+
         return (
           <Marker
-            key={`cluster-mode-${clusterModeVersion}-${item.key}`}
+            key={clusterMarkerKey}
+            identifier={clusterMarkerKey}
             coordinate={{ latitude: item.lat, longitude: item.lng }}
             anchor={{ x: 0.5, y: 1 }}
             title="Nearby group"
             description={`${item.count} people nearby`}
             zIndex={CLUSTER_MARKER_Z_INDEX}
+            tracksViewChanges={clusterMarkersTrackViewChanges}
             onPress={(event) => {
               event.stopPropagation?.();
               onClusterMarkerPress(item);
@@ -509,10 +517,39 @@ export default function MapScreen() {
   const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
   const [meetSearchQuery, setMeetSearchQuery] = useState("");
   const [showMeetPins, setShowMeetPins] = useState(true);
+  const [clusterMarkerRedrawVersion, setClusterMarkerRedrawVersion] = useState(0);
+  const [clusterMarkersTrackViewChanges, setClusterMarkersTrackViewChanges] =
+    useState(false);
+  const previousMeetMarkerRedrawStateRef = useRef({
+    selectedMeetId,
+    showMeetPins,
+  });
 
   useEffect(() => {
     selectedMeetIdRef.current = selectedMeetId;
   }, [selectedMeetId]);
+
+  useEffect(() => {
+    const previous = previousMeetMarkerRedrawStateRef.current;
+    const meetMarkerStateChanged =
+      previous.selectedMeetId !== selectedMeetId ||
+      previous.showMeetPins !== showMeetPins;
+
+    if (!meetMarkerStateChanged) return;
+
+    previousMeetMarkerRedrawStateRef.current = {
+      selectedMeetId,
+      showMeetPins,
+    };
+    setClusterMarkerRedrawVersion((version) => version + 1);
+    setClusterMarkersTrackViewChanges(true);
+
+    const timeout = setTimeout(() => {
+      setClusterMarkersTrackViewChanges(false);
+    }, 350);
+
+    return () => clearTimeout(timeout);
+  }, [selectedMeetId, showMeetPins]);
   const [focusedClusterKey, setFocusedClusterKey] = useState<string | null>(null);
   const animatedUserCoordsRef = useRef<Record<string, AnimatedRegion>>({});
   const markerRefs = useRef<Record<string, any>>({});
@@ -1618,6 +1655,8 @@ export default function MapScreen() {
           profilesById={profilesById}
           currentUserLocation={currentUserLocation}
           clusterModeVersion={clusterModeVersion}
+          clusterMarkerRedrawVersion={clusterMarkerRedrawVersion}
+          clusterMarkersTrackViewChanges={clusterMarkersTrackViewChanges}
           onClusterMarkerPress={handleClusterMarkerPress}
         />
       </MapView>
