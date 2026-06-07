@@ -1733,15 +1733,17 @@ export default function MapScreen() {
           <View style={styles.meetsSheetHandleWrap}>
             <View style={styles.meetsSheetHandle} />
           </View>
-          <TextInput
-            value={meetSearchQuery}
-            onChangeText={setMeetSearchQuery}
-            placeholder="Search upcoming meets"
-            placeholderTextColor="#8a8a8a"
-            style={styles.meetsSearchInput}
-          />
-          <View pointerEvents="none" style={styles.meetsSearchIconWrap}>
-            <Text style={styles.meetsSearchIcon}>⌕</Text>
+          <View style={styles.meetsSearchBar}>
+            <TextInput
+              value={meetSearchQuery}
+              onChangeText={setMeetSearchQuery}
+              placeholder="Search upcoming meets"
+              placeholderTextColor="#8a8a8a"
+              style={styles.meetsSearchInput}
+            />
+            <View pointerEvents="none" style={styles.meetsSearchIconWrap}>
+              <MaterialCommunityIcons name="magnify" style={styles.meetsSearchIcon} />
+            </View>
           </View>
           <ScrollView
             style={styles.meetsListScroll}
