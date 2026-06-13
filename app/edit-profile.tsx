@@ -12,11 +12,13 @@ import {
   TextInput,
   View,
 } from "react-native";
+import type { ComponentProps } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 import s from "@/styles/profilestyles";
+import { colors } from "@/styles/themes";
 import { supabase } from "../database/supabase";
 import { useMapData } from "@/components/MapDataProvider";
 import { ensureMinimalProfileExists } from "@/utils/profileReadiness";
@@ -50,6 +52,15 @@ type ProfileCustomizationRow = {
   accent_color: string | null;
 };
 
+type SettingsSection =
+  | "main"
+  | "profile"
+  | "privacy"
+  | "location"
+  | "social"
+  | "appearance"
+  | "account";
+
 const DEFAULT_ACCENT_COLOR = "#ef4444";
 const ACCENT_COLOR_PRESETS = [
   "#ef4444",
@@ -65,6 +76,7 @@ const ACCENT_COLOR_PRESETS = [
 export default function EditProfileScreen() {
   const { myUserId, profilesById, refresh, loading: mapDataLoading } = useMapData();
 
+  const [activeSection, setActiveSection] = useState<SettingsSection>("main");
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [username, setUsername] = useState("");
@@ -309,12 +321,20 @@ export default function EditProfileScreen() {
     }
   }
 
-  function cancelEditing() {
-    if (profile) hydrateProfile(profile);
+  function goBackFromSettings() {
+    if (activeSection !== "main") {
+      setActiveSection("main");
+      return;
+    }
     router.back();
   }
 
-  async function saveProfile() {
+  function cancelSectionEditing() {
+    if (profile) hydrateProfile(profile);
+    setActiveSection("main");
+  }
+
+  async function saveProfile(returnToMain = false) {
     if (!myUserId) return;
 
     setSaving(true);
@@ -350,7 +370,11 @@ export default function EditProfileScreen() {
     hydrateProfile(data);
     await refresh(myUserId);
     setSaving(false);
-    router.back();
+    if (returnToMain) {
+      setActiveSection("main");
+    } else {
+      router.back();
+    }
   }
 
   async function saveAccentColor(nextColor: string) {
@@ -391,52 +415,145 @@ export default function EditProfileScreen() {
     router.replace("/map");
   }
 
-  if (loading) {
-    return (
-      <View style={s.center}>
-        <ActivityIndicator />
-        <Text style={s.placeholderText}>Loading settings…</Text>
-      </View>
-    );
-  }
+  const profilePreview = [displayName.trim() || "No display name", username.trim() ? `@${username.trim()}` : "@username"]
+    .filter(Boolean)
+    .join(" ");
+  const socialCount = [
+    instagramHandle,
+    tiktokHandle,
+    twitterHandle,
+    snapchatHandle,
+  ].filter((handle) => handle.trim()).length;
+  const premiumText = isPremium ? "Premium active" : "Premium upgrade required";
+  const sectionTitle =
+    activeSection === "main"
+      ? "Edit Profile"
+      : activeSection === "profile"
+      ? "Profile"
+      : activeSection === "privacy"
+      ? "Privacy"
+      : activeSection === "location"
+      ? "Location"
+      : activeSection === "social"
+      ? "Social Handles"
+      : activeSection === "appearance"
+      ? "Appearance / Premium"
+      : "Account";
 
-  if (!profile) {
+  function renderSectionHeader(subtitle: string) {
     return (
-      <View style={s.center}>
-        <Text style={s.placeholderText}>Profile not found.</Text>
-        {error ? <Text style={s.error}>{error}</Text> : null}
-      </View>
-    );
-  }
-
-  return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={s.screen}
-    >
-      <ScrollView
-        style={s.scroll}
-        contentContainerStyle={s.settingsContainer}
-        showsVerticalScrollIndicator={false}
-        overScrollMode="never"
-        bounces={false}
-      >
-        <View style={s.editScreenHeader}>
-          <Pressable onPress={cancelEditing} style={s.backButton} accessibilityRole="button" accessibilityLabel="Back to profile">
-            <MaterialCommunityIcons name="chevron-left" size={26} color="#fff" />
-          </Pressable>
-          <View>
-            <Text style={s.editScreenTitle}>Edit Profile</Text>
-            <Text style={s.editScreenSubtitle}>Keep your public profile clean and up to date.</Text>
-          </View>
+      <View style={s.editScreenHeader}>
+        <Pressable
+          onPress={goBackFromSettings}
+          style={s.backButton}
+          accessibilityRole="button"
+          accessibilityLabel={activeSection === "main" ? "Back to profile" : "Back to settings"}
+        >
+          <MaterialCommunityIcons name="chevron-left" size={26} color="#fff" />
+        </Pressable>
+        <View style={s.editHeaderTextWrap}>
+          <Text style={s.editScreenTitle}>{sectionTitle}</Text>
+          <Text style={s.editScreenSubtitle}>{subtitle}</Text>
         </View>
+      </View>
+    );
+  }
 
+  function renderSectionRow(
+    section: Exclude<SettingsSection, "main">,
+    icon: ComponentProps<typeof MaterialCommunityIcons>["name"],
+    title: string,
+    subtitle: string
+  ) {
+    return (
+      <Pressable
+        key={section}
+        onPress={() => setActiveSection(section)}
+        style={s.settingsRowCard}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${title} settings`}
+      >
+        <View style={s.settingsRowIcon}>
+          <MaterialCommunityIcons name={icon} size={22} color={colors.primary} />
+        </View>
+        <View style={s.settingsRowTextWrap}>
+          <Text style={s.settingsRowTitle}>{title}</Text>
+          <Text style={s.settingsRowSubtitle} numberOfLines={2}>
+            {subtitle}
+          </Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.silver} />
+      </Pressable>
+    );
+  }
+
+  function renderSectionActions() {
+    return (
+      <>
+        {error ? <Text style={s.error}>{error}</Text> : null}
+        <View style={s.btnRow}>
+          <Pressable
+            onPress={() => {
+              void saveProfile(true);
+            }}
+            disabled={saving}
+            style={[s.primaryBtn, s.sectionActionButton, saving && { opacity: 0.7 }]}
+          >
+            {saving ? <ActivityIndicator /> : <Text style={s.primaryBtnText}>Save</Text>}
+          </Pressable>
+          <Pressable onPress={cancelSectionEditing} style={[s.secondaryBtn, s.sectionActionButton]}>
+            <Text style={s.secondaryBtnText}>Cancel</Text>
+          </Pressable>
+        </View>
+      </>
+    );
+  }
+
+  function renderMainSettings() {
+    return (
+      <>
+        {renderSectionHeader("Choose a section to update your CarMeet profile.")}
+        <View style={s.settingsList}>
+          {renderSectionRow("profile", "account-circle", "Profile", profilePreview)}
+          {renderSectionRow(
+            "privacy",
+            "shield-lock-outline",
+            "Privacy",
+            "Profile details use current CarMeet visibility rules."
+          )}
+          {renderSectionRow(
+            "location",
+            "map-marker-radius-outline",
+            "Location",
+            `${locationVis || "everyone"} visibility${hasLocation ? ` - ${locationText}` : ""}`
+          )}
+          {renderSectionRow(
+            "social",
+            "at",
+            "Social Handles",
+            isPremium ? `${socialCount} handle${socialCount === 1 ? "" : "s"} added` : "Premium required"
+          )}
+          {renderSectionRow(
+            "appearance",
+            "palette-outline",
+            "Appearance / Premium",
+            premiumText
+          )}
+          {renderSectionRow("account", "cog-outline", "Account", email ?? "Signed in")}
+        </View>
+      </>
+    );
+  }
+
+  function renderProfileSection() {
+    return (
+      <>
+        {renderSectionHeader("Update your public identity and photos.")}
         <View style={s.settingsSectionCard}>
-          <Text style={s.sectionTitle}>Profile settings</Text>
           <View style={s.field}>
             <Text style={s.label}>Profile photo</Text>
             <View style={s.settingsPhotoRow}>
-              <View style={[s.settingsPhotoWrap, { borderColor: appliedAccentColor }]}> 
+              <View style={[s.settingsPhotoWrap, { borderColor: appliedAccentColor }]}>
                 {photoUrl ? (
                   <Image source={{ uri: photoUrl }} style={s.settingsPhotoPreview} />
                 ) : (
@@ -473,55 +590,37 @@ export default function EditProfileScreen() {
             <Text style={s.label}>Bio</Text>
             <TextInput value={bio} onChangeText={setBio} placeholder="Tell people about yourself" multiline style={[s.input, s.textarea]} placeholderTextColor="#9ca3af" />
           </View>
+        </View>
+        {renderSectionActions()}
+      </>
+    );
+  }
 
-          <View style={s.field}>
-            <Text style={s.label}>Profile outline color</Text>
-            {isPremium ? (
-              <View style={s.accentPickerRow}>
-                {ACCENT_COLOR_PRESETS.map((color) => {
-                  const selected = accentColor === color;
-                  const savingThis = customizationSavingColor === color;
-                  return (
-                    <Pressable
-                      key={color}
-                      disabled={savingThis || customizationLoading}
-                      onPress={() => {
-                        void saveAccentColor(color);
-                      }}
-                      style={[
-                        s.accentSwatch,
-                        { backgroundColor: color },
-                        selected && s.accentSwatchSelected,
-                        (savingThis || customizationLoading) && { opacity: 0.7 },
-                      ]}
-                    >
-                      {selected ? <Text style={s.accentSwatchCheck}>✓</Text> : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ) : (
-              <Text style={s.placeholderText}>Premium unlocks custom profile outline colors.</Text>
-            )}
+  function renderPrivacySection() {
+    return (
+      <>
+        {renderSectionHeader("Review what is currently visible on your profile.")}
+        <View style={s.settingsSectionCard}>
+          <View style={s.infoRow}>
+            <Text style={s.label}>Profile visibility</Text>
+            <Text style={s.placeholderText}>Your CarMeet profile is visible through current app profile rules.</Text>
           </View>
-
-          <View style={s.field}>
-            <Text style={s.label}>Social handles</Text>
-            {isPremium ? (
-              <>
-                <TextInput value={instagramHandle} onChangeText={setInstagramHandle} placeholder="Instagram handle" style={s.input} autoCapitalize="none" placeholderTextColor="#9ca3af" />
-                <TextInput value={tiktokHandle} onChangeText={setTiktokHandle} placeholder="TikTok handle" style={[s.input, s.socialInput]} autoCapitalize="none" placeholderTextColor="#9ca3af" />
-                <TextInput value={twitterHandle} onChangeText={setTwitterHandle} placeholder="Twitter/X handle" style={[s.input, s.socialInput]} autoCapitalize="none" placeholderTextColor="#9ca3af" />
-                <TextInput value={snapchatHandle} onChangeText={setSnapchatHandle} placeholder="Snapchat handle" style={[s.input, s.socialInput]} autoCapitalize="none" placeholderTextColor="#9ca3af" />
-              </>
-            ) : (
-              <Text style={s.placeholderText}>Premium required to add social handles. Upgrade to unlock this section.</Text>
-            )}
+          <View style={s.infoRow}>
+            <Text style={s.label}>Social handles visibility</Text>
+            <Text style={s.placeholderText}>
+              Handles appear on your profile and map card when saved. Leave a handle blank to hide it.
+            </Text>
           </View>
         </View>
+      </>
+    );
+  }
 
+  function renderLocationSection() {
+    return (
+      <>
+        {renderSectionHeader("Control how your saved location appears.")}
         <View style={s.settingsSectionCard}>
-          <Text style={s.sectionTitle}>Privacy settings</Text>
           <View style={s.field}>
             <Text style={s.label}>Location visibility</Text>
             <View style={s.locationRow}>
@@ -539,34 +638,138 @@ export default function EditProfileScreen() {
               })}
             </View>
           </View>
-        </View>
-
-        <View style={s.settingsSectionCard}>
-          <Text style={s.sectionTitle}>Location settings</Text>
           <Text style={s.placeholderText}>
             {hasLocation ? `Current profile location: ${locationText}` : "No city or state is saved yet."}
           </Text>
           <Text style={[s.placeholderText, s.settingsHelperText]}>
-            Your saved location is managed by CarMeet location services; use privacy settings to control who can see it.
+            Your saved location is managed by CarMeet location services; this setting controls who can see it on the map and profile.
           </Text>
         </View>
+        {renderSectionActions()}
+      </>
+    );
+  }
 
-        {error ? <Text style={s.error}>{error}</Text> : null}
-
-        <View style={s.btnRow}>
-          <Pressable onPress={saveProfile} disabled={saving} style={[s.primaryBtn, saving && { opacity: 0.7 }]}> 
-            {saving ? <ActivityIndicator /> : <Text style={s.primaryBtnText}>Save</Text>}
-          </Pressable>
-          <Pressable onPress={cancelEditing} style={s.secondaryBtn}>
-            <Text style={s.secondaryBtnText}>Cancel</Text>
-          </Pressable>
+  function renderSocialSection() {
+    return (
+      <>
+        {renderSectionHeader("Connect your social profiles.")}
+        <View style={s.settingsSectionCard}>
+          <Text style={s.sectionTitle}>Social handles</Text>
+          {isPremium ? (
+            <>
+              <TextInput value={instagramHandle} onChangeText={setInstagramHandle} placeholder="Instagram handle" style={s.input} autoCapitalize="none" placeholderTextColor="#9ca3af" />
+              <TextInput value={tiktokHandle} onChangeText={setTiktokHandle} placeholder="TikTok handle" style={[s.input, s.socialInput]} autoCapitalize="none" placeholderTextColor="#9ca3af" />
+              <TextInput value={twitterHandle} onChangeText={setTwitterHandle} placeholder="Twitter/X handle" style={[s.input, s.socialInput]} autoCapitalize="none" placeholderTextColor="#9ca3af" />
+              <TextInput value={snapchatHandle} onChangeText={setSnapchatHandle} placeholder="Snapchat handle" style={[s.input, s.socialInput]} autoCapitalize="none" placeholderTextColor="#9ca3af" />
+            </>
+          ) : (
+            <Text style={s.placeholderText}>Premium required to add social handles. Upgrade to unlock this section.</Text>
+          )}
         </View>
+        {isPremium ? renderSectionActions() : null}
+      </>
+    );
+  }
 
+  function renderAppearanceSection() {
+    return (
+      <>
+        {renderSectionHeader("Customize premium profile styling.")}
+        <View style={s.settingsSectionCard}>
+          <Text style={s.sectionTitle}>Profile outline color</Text>
+          {isPremium ? (
+            <View style={s.accentPickerRow}>
+              {ACCENT_COLOR_PRESETS.map((color) => {
+                const selected = accentColor === color;
+                const savingThis = customizationSavingColor === color;
+                return (
+                  <Pressable
+                    key={color}
+                    disabled={savingThis || customizationLoading}
+                    onPress={() => {
+                      void saveAccentColor(color);
+                    }}
+                    style={[
+                      s.accentSwatch,
+                      { backgroundColor: color },
+                      selected && s.accentSwatchSelected,
+                      (savingThis || customizationLoading) && { opacity: 0.7 },
+                    ]}
+                  >
+                    {selected ? <MaterialCommunityIcons name="check" size={15} color="#fff" /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={s.placeholderText}>Premium unlocks custom profile outline colors.</Text>
+          )}
+        </View>
+      </>
+    );
+  }
+
+  function renderAccountSection() {
+    return (
+      <>
+        {renderSectionHeader("Manage your signed-in account.")}
+        <View style={s.settingsSectionCard}>
+          <View style={s.infoRow}>
+            <Text style={s.label}>Email</Text>
+            <Text style={s.placeholderText}>{email ?? "No email available"}</Text>
+          </View>
+        </View>
         <View style={s.signOutWrap}>
-          <Pressable onPress={handleSignOut} disabled={signingOut} style={[s.signOutButton, signingOut && { opacity: 0.7 }]}> 
+          <Pressable onPress={handleSignOut} disabled={signingOut} style={[s.signOutButton, signingOut && { opacity: 0.7 }]}>
             {signingOut ? <ActivityIndicator /> : <Text style={s.signOutButtonText}>Sign out</Text>}
           </Pressable>
         </View>
+      </>
+    );
+  }
+
+  function renderActiveSection() {
+    if (activeSection === "profile") return renderProfileSection();
+    if (activeSection === "privacy") return renderPrivacySection();
+    if (activeSection === "location") return renderLocationSection();
+    if (activeSection === "social") return renderSocialSection();
+    if (activeSection === "appearance") return renderAppearanceSection();
+    if (activeSection === "account") return renderAccountSection();
+    return renderMainSettings();
+  }
+
+  if (loading) {
+    return (
+      <View style={s.center}>
+        <ActivityIndicator />
+        <Text style={s.placeholderText}>Loading settings...</Text>
+      </View>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <View style={s.center}>
+        <Text style={s.placeholderText}>Profile not found.</Text>
+        {error ? <Text style={s.error}>{error}</Text> : null}
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={s.screen}
+    >
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={s.settingsContainer}
+        showsVerticalScrollIndicator={false}
+        overScrollMode="never"
+        bounces={false}
+      >
+        {renderActiveSection()}
       </ScrollView>
     </KeyboardAvoidingView>
   );

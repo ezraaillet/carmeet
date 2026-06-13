@@ -457,6 +457,10 @@ const profileStyles = StyleSheet.create({
     marginBottom: 4,
   },
 
+  editHeaderTextWrap: {
+    flex: 1,
+  },
+
   backButton: {
     width: 38,
     height: 38,
@@ -483,6 +487,59 @@ const profileStyles = StyleSheet.create({
     backgroundColor: colors.charcoal,
     borderWidth: 1,
     borderColor: colors.gunmetal,
+  },
+
+  settingsList: {
+    gap: 10,
+  },
+
+  settingsRowCard: {
+    minHeight: 78,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: colors.charcoal,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+  },
+
+  settingsRowIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(225, 6, 0, 0.13)",
+  },
+
+  settingsRowTextWrap: {
+    flex: 1,
+    gap: 3,
+  },
+
+  settingsRowTitle: {
+    color: colors.offwhite,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+
+  settingsRowSubtitle: {
+    color: colors.silver,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+
+  infoRow: {
+    gap: 4,
+    marginBottom: 14,
+  },
+
+  sectionActionButton: {
+    flex: 1,
+    alignItems: "center",
   },
 
   bannerPreview: {
