@@ -26,6 +26,7 @@ type Profile = {
   username: string | null;
   display_name: string | null;
   photo_url: string | null;
+  profile_visibility?: string | null;
   location_visibility?: string | null;
   bio?: string | null;
   city?: string | null;
@@ -40,6 +41,8 @@ type Profile = {
   accent_color?: string | null;
   is_active_premium?: boolean;
 };
+
+export const PUBLIC_DISCOVERY_RADIUS_METERS = 100;
 
 type Meet = {
   id: string;
@@ -123,6 +126,18 @@ function dedupeMeets(rows: Meet[]) {
   });
 }
 
+function isPubliclyDiscoverableProfile(profile: Profile | null | undefined) {
+  if (!profile) return false;
+
+  const locationVisibility = (profile.location_visibility ?? "everyone").toLowerCase();
+  const profileVisibility = (profile.profile_visibility ?? "public").toLowerCase();
+
+  return (
+    locationVisibility === "everyone" &&
+    (profileVisibility === "public" || profileVisibility === "everyone")
+  );
+}
+
 export function MapDataProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [friendsLoaded, setFriendsLoaded] = useState(false);
@@ -143,6 +158,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
     Record<string, MeetAttendeeSummary>
   >({});
   const currentUserIdRef = useRef<string | null>(null);
+  const currentUserLocationRef = useRef<LiveLoc | null>(null);
   const refreshSeqRef = useRef(0);
 
   const didSubscribeRef = useRef(false);
@@ -173,7 +189,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchNearbyUserIds = useCallback(
-    async (myLat: number, myLng: number, radiusMeters = 1609.34) => {
+    async (myLat: number, myLng: number, radiusMeters = PUBLIC_DISCOVERY_RADIUS_METERS) => {
       const deltaLat = radiusMeters / 111_111;
       const deltaLng =
         radiusMeters / (111_111 * Math.cos((myLat * Math.PI) / 180));
@@ -303,6 +319,10 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         const locMap: Record<string, LiveLoc> = {};
         (locRows ?? []).forEach((l: any) => (locMap[l.user_id] = l as LiveLoc));
         setLocationsById((prev) => ({ ...prev, ...locMap }));
+        const activeUid = currentUserIdRef.current;
+        if (activeUid && locMap[activeUid]) {
+          currentUserLocationRef.current = locMap[activeUid];
+        }
 
         const locationIds = Object.keys(locMap);
         console.log("[MapData] loadForIds locations", {
@@ -317,7 +337,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           supabase
             .from("profiles")
             .select(
-              "id, username, display_name, photo_url, location_visibility, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle, onboarded"
+              "id, username, display_name, photo_url, profile_visibility, location_visibility, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle, onboarded"
             )
             .in("id", uniq),
           supabase
@@ -451,7 +471,19 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         setFriendIds(friendIds);
         setFriendsLoaded(true);
         const baseIds = Array.from(new Set([uid, ...friendIds]));
+        const baseIdSet = new Set(baseIds);
         setIds(baseIds);
+
+        const loadNearbyPublicUsers = async (lat: number, lng: number) => {
+          const nearbyIds = await fetchNearbyUserIds(lat, lng, PUBLIC_DISCOVERY_RADIUS_METERS);
+          if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
+
+          const combined = Array.from(new Set([...baseIds, ...nearbyIds]));
+          setIds(combined);
+
+          const missing = combined.filter((id) => !baseIdSet.has(id));
+          await loadForIds(missing);
+        };
 
         await Promise.all([loadForIds(baseIds), fetchMeets(uid)]);
         if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
@@ -466,18 +498,66 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
               { event: "*", schema: "public", table: "locations" },
               async (payload) => {
                 const row = payload.new as LiveLoc;
+                if (!row?.user_id || !Number.isFinite(row.lat) || !Number.isFinite(row.lng)) return;
+
+                const activeUid = currentUserIdRef.current;
+                if (!activeUid) return;
+
+                const isSelf = row.user_id === activeUid;
+                const isFriend = friendIds.includes(row.user_id);
+                const myLocation = isSelf ? row : currentUserLocationRef.current;
+
+                if (isSelf) {
+                  currentUserLocationRef.current = row;
+                } else if (!isFriend) {
+                  if (!myLocation) return;
+
+                  const distanceFromMe = metersBetween(myLocation.lat, myLocation.lng, row.lat, row.lng);
+                  if (distanceFromMe > PUBLIC_DISCOVERY_RADIUS_METERS) {
+                    setLocationsById((prev) => {
+                      const next = { ...prev };
+                      delete next[row.user_id];
+                      return next;
+                    });
+                    setProfilesById((prev) => {
+                      const next = { ...prev };
+                      delete next[row.user_id];
+                      return next;
+                    });
+                    return;
+                  }
+                }
 
                 setLocationsById((prev) => ({ ...prev, [row.user_id]: row }));
+
+                if (isSelf) {
+                  void loadNearbyPublicUsers(row.lat, row.lng);
+                  return;
+                }
 
                 const { data: p } = await supabase
                   .from("profiles")
                   .select(
-                    "id, username, display_name, photo_url, location_visibility, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle, onboarded"
+                    "id, username, display_name, photo_url, profile_visibility, location_visibility, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle, onboarded"
                   )
                   .eq("id", row.user_id)
                   .maybeSingle<Profile>();
 
                 if (p) {
+                  if (!isFriend && !isPubliclyDiscoverableProfile(p)) {
+                    setLocationsById((prev) => {
+                      const next = { ...prev };
+                      delete next[row.user_id];
+                      return next;
+                    });
+                    setProfilesById((prev) => {
+                      const next = { ...prev };
+                      delete next[row.user_id];
+                      return next;
+                    });
+                    return;
+                  }
+
                   const [{ data: membership }, { data: customization }] = await Promise.all([
                     supabase
                       .from("user_memberships")
@@ -552,13 +632,15 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           const myLat = pos.coords.latitude;
           const myLng = pos.coords.longitude;
 
-          const nearbyIds = await fetchNearbyUserIds(myLat, myLng, 1609.34);
-          if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
-          const combined = Array.from(new Set([...baseIds, ...nearbyIds]));
-          setIds(combined);
-
-          const missing = combined.filter((id) => !baseIds.includes(id));
-          await loadForIds(missing);
+          currentUserLocationRef.current = {
+            user_id: uid,
+            lat: myLat,
+            lng: myLng,
+            heading: pos.coords.heading ?? undefined,
+            speed: pos.coords.speed ?? undefined,
+            updated_at: new Date().toISOString(),
+          };
+          await loadNearbyPublicUsers(myLat, myLng);
         }
       } catch (e: any) {
         setFriendsLoaded(false);

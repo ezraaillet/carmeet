@@ -12,16 +12,16 @@ import {
   TextInput,
   View,
 } from "react-native";
-import type { ComponentProps } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { router } from "expo-router";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 
-import s from "@/styles/profilestyles";
+import type { ComponentProps } from "react";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "@/styles/themes";
+import { ensureMinimalProfileExists } from "@/utils/profileReadiness";
+import { router } from "expo-router";
+import s from "@/styles/profilestyles";
 import { supabase } from "../database/supabase";
 import { useMapData } from "@/components/MapDataProvider";
-import { ensureMinimalProfileExists } from "@/utils/profileReadiness";
 
 type ProfileRow = {
   id: string;
@@ -56,9 +56,7 @@ type SettingsSection =
   | "main"
   | "profile"
   | "privacy"
-  | "location"
-  | "social"
-  | "appearance"
+  | "subscription"
   | "account";
 
 const DEFAULT_ACCENT_COLOR = "#ef4444";
@@ -74,7 +72,12 @@ const ACCENT_COLOR_PRESETS = [
 ];
 
 export default function EditProfileScreen() {
-  const { myUserId, profilesById, refresh, loading: mapDataLoading } = useMapData();
+  const {
+    myUserId,
+    profilesById,
+    refresh,
+    loading: mapDataLoading,
+  } = useMapData();
 
   const [activeSection, setActiveSection] = useState<SettingsSection>("main");
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -94,7 +97,9 @@ export default function EditProfileScreen() {
   const [membership, setMembership] = useState<MembershipRow | null>(null);
   const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT_COLOR);
   const [customizationLoading, setCustomizationLoading] = useState(false);
-  const [customizationSavingColor, setCustomizationSavingColor] = useState<string | null>(null);
+  const [customizationSavingColor, setCustomizationSavingColor] = useState<
+    string | null
+  >(null);
   const [loadingLocal, setLoadingLocal] = useState(true);
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -112,7 +117,8 @@ export default function EditProfileScreen() {
 
   const membershipPlan = membership?.plan ?? "free";
   const membershipStatus = membership?.status ?? "inactive";
-  const isPremium = membershipPlan === "premium" && membershipStatus === "active";
+  const isPremium =
+    membershipPlan === "premium" && membershipStatus === "active";
   const appliedAccentColor = isPremium ? accentColor : DEFAULT_ACCENT_COLOR;
   const hasLocation = Boolean(city || state);
   const locationText = [city, state].filter(Boolean).join(", ");
@@ -242,7 +248,7 @@ export default function EditProfileScreen() {
   async function uploadImageToStorage(
     asset: ImagePicker.ImagePickerAsset,
     bucket: string,
-    pathPrefix: string
+    pathPrefix: string,
   ): Promise<string> {
     const ext =
       asset.fileName?.split(".").pop() || asset.uri.split(".").pop() || "jpg";
@@ -252,8 +258,8 @@ export default function EditProfileScreen() {
       (ext === "png"
         ? "image/png"
         : ext === "jpg" || ext === "jpeg"
-        ? "image/jpeg"
-        : "image/*");
+          ? "image/jpeg"
+          : "image/*");
 
     const response = await fetch(asset.uri);
     const arrayBuffer = await response.arrayBuffer();
@@ -289,7 +295,11 @@ export default function EditProfileScreen() {
 
     try {
       if (!myUserId) throw new Error("No user id");
-      const uploadedUrl = await uploadImageToStorage(result.assets[0], "avatars", `${myUserId}`);
+      const uploadedUrl = await uploadImageToStorage(
+        result.assets[0],
+        "avatars",
+        `${myUserId}`,
+      );
       setPhotoUrl(uploadedUrl);
     } catch (e: any) {
       Alert.alert("Upload failed", e?.message ?? "Unknown error");
@@ -314,7 +324,11 @@ export default function EditProfileScreen() {
 
     try {
       if (!myUserId) throw new Error("No user id");
-      const uploadedUrl = await uploadImageToStorage(result.assets[0], "avatars", `${myUserId}/banners`);
+      const uploadedUrl = await uploadImageToStorage(
+        result.assets[0],
+        "avatars",
+        `${myUserId}/banners`,
+      );
       setBannerUrl(uploadedUrl);
     } catch (e: any) {
       Alert.alert("Upload failed", e?.message ?? "Unknown error");
@@ -326,7 +340,7 @@ export default function EditProfileScreen() {
       setActiveSection("main");
       return;
     }
-    router.back();
+    router.replace("/profile");
   }
 
   function cancelSectionEditing() {
@@ -388,7 +402,7 @@ export default function EditProfileScreen() {
           user_id: myUserId,
           accent_color: nextColor,
         },
-        { onConflict: "user_id" }
+        { onConflict: "user_id" },
       );
 
     if (upsertErr) {
@@ -415,30 +429,23 @@ export default function EditProfileScreen() {
     router.replace("/map");
   }
 
-  const profilePreview = [displayName.trim() || "No display name", username.trim() ? `@${username.trim()}` : "@username"]
+  const profilePreview = [
+    displayName.trim() || "No display name",
+    username.trim() ? `@${username.trim()}` : "@username",
+  ]
     .filter(Boolean)
     .join(" ");
-  const socialCount = [
-    instagramHandle,
-    tiktokHandle,
-    twitterHandle,
-    snapchatHandle,
-  ].filter((handle) => handle.trim()).length;
   const premiumText = isPremium ? "Premium active" : "Premium upgrade required";
   const sectionTitle =
     activeSection === "main"
       ? "Edit Profile"
       : activeSection === "profile"
-      ? "Profile"
-      : activeSection === "privacy"
-      ? "Privacy"
-      : activeSection === "location"
-      ? "Location"
-      : activeSection === "social"
-      ? "Social Handles"
-      : activeSection === "appearance"
-      ? "Appearance / Premium"
-      : "Account";
+        ? "Profile"
+        : activeSection === "privacy"
+          ? "Privacy & Location"
+          : activeSection === "subscription"
+            ? "Subscription"
+            : "Account";
 
   function renderSectionHeader(subtitle: string) {
     return (
@@ -447,7 +454,9 @@ export default function EditProfileScreen() {
           onPress={goBackFromSettings}
           style={s.backButton}
           accessibilityRole="button"
-          accessibilityLabel={activeSection === "main" ? "Back to profile" : "Back to settings"}
+          accessibilityLabel={
+            activeSection === "main" ? "Back to profile" : "Back to settings"
+          }
         >
           <MaterialCommunityIcons name="chevron-left" size={26} color="#fff" />
         </Pressable>
@@ -463,7 +472,7 @@ export default function EditProfileScreen() {
     section: Exclude<SettingsSection, "main">,
     icon: ComponentProps<typeof MaterialCommunityIcons>["name"],
     title: string,
-    subtitle: string
+    subtitle: string,
   ) {
     return (
       <Pressable
@@ -474,7 +483,11 @@ export default function EditProfileScreen() {
         accessibilityLabel={`Open ${title} settings`}
       >
         <View style={s.settingsRowIcon}>
-          <MaterialCommunityIcons name={icon} size={22} color={colors.primary} />
+          <MaterialCommunityIcons
+            name={icon}
+            size={22}
+            color={colors.primary}
+          />
         </View>
         <View style={s.settingsRowTextWrap}>
           <Text style={s.settingsRowTitle}>{title}</Text>
@@ -482,7 +495,11 @@ export default function EditProfileScreen() {
             {subtitle}
           </Text>
         </View>
-        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.silver} />
+        <MaterialCommunityIcons
+          name="chevron-right"
+          size={24}
+          color={colors.silver}
+        />
       </Pressable>
     );
   }
@@ -497,11 +514,22 @@ export default function EditProfileScreen() {
               void saveProfile(true);
             }}
             disabled={saving}
-            style={[s.primaryBtn, s.sectionActionButton, saving && { opacity: 0.7 }]}
+            style={[
+              s.primaryBtn,
+              s.sectionActionButton,
+              saving && { opacity: 0.7 },
+            ]}
           >
-            {saving ? <ActivityIndicator /> : <Text style={s.primaryBtnText}>Save</Text>}
+            {saving ? (
+              <ActivityIndicator />
+            ) : (
+              <Text style={s.primaryBtnText}>Save</Text>
+            )}
           </Pressable>
-          <Pressable onPress={cancelSectionEditing} style={[s.secondaryBtn, s.sectionActionButton]}>
+          <Pressable
+            onPress={cancelSectionEditing}
+            style={[s.secondaryBtn, s.sectionActionButton]}
+          >
             <Text style={s.secondaryBtnText}>Cancel</Text>
           </Pressable>
         </View>
@@ -512,34 +540,34 @@ export default function EditProfileScreen() {
   function renderMainSettings() {
     return (
       <>
-        {renderSectionHeader("Choose a section to update your CarMeet profile.")}
+        {renderSectionHeader(
+          "Choose a section to update your CarMeet profile.",
+        )}
         <View style={s.settingsList}>
-          {renderSectionRow("profile", "account-circle", "Profile", profilePreview)}
+          {renderSectionRow(
+            "profile",
+            "account-circle",
+            "Profile",
+            profilePreview,
+          )}
           {renderSectionRow(
             "privacy",
             "shield-lock-outline",
-            "Privacy",
-            "Profile details use current CarMeet visibility rules."
+            "Privacy & Location",
+            `${locationVis || "everyone"} visibility${hasLocation ? ` - ${locationText}` : ""}`,
           )}
           {renderSectionRow(
-            "location",
-            "map-marker-radius-outline",
-            "Location",
-            `${locationVis || "everyone"} visibility${hasLocation ? ` - ${locationText}` : ""}`
+            "subscription",
+            "credit-card-outline",
+            "Subscription",
+            premiumText,
           )}
           {renderSectionRow(
-            "social",
-            "at",
-            "Social Handles",
-            isPremium ? `${socialCount} handle${socialCount === 1 ? "" : "s"} added` : "Premium required"
+            "account",
+            "cog-outline",
+            "Account",
+            email ?? "Signed in",
           )}
-          {renderSectionRow(
-            "appearance",
-            "palette-outline",
-            "Appearance / Premium",
-            premiumText
-          )}
-          {renderSectionRow("account", "cog-outline", "Account", email ?? "Signed in")}
         </View>
       </>
     );
@@ -553,9 +581,17 @@ export default function EditProfileScreen() {
           <View style={s.field}>
             <Text style={s.label}>Profile photo</Text>
             <View style={s.settingsPhotoRow}>
-              <View style={[s.settingsPhotoWrap, { borderColor: appliedAccentColor }]}>
+              <View
+                style={[
+                  s.settingsPhotoWrap,
+                  { borderColor: appliedAccentColor },
+                ]}
+              >
                 {photoUrl ? (
-                  <Image source={{ uri: photoUrl }} style={s.settingsPhotoPreview} />
+                  <Image
+                    source={{ uri: photoUrl }}
+                    style={s.settingsPhotoPreview}
+                  />
                 ) : (
                   <View style={[s.settingsPhotoPreview, s.avatarFallback]}>
                     <Text style={s.avatarInitials}>{initials || "?"}</Text>
@@ -570,25 +606,135 @@ export default function EditProfileScreen() {
 
           <View style={s.field}>
             <Text style={s.label}>Banner photo</Text>
-            {bannerUrl ? <Image source={{ uri: bannerUrl }} style={s.bannerPreview} /> : null}
+            {bannerUrl ? (
+              <Image source={{ uri: bannerUrl }} style={s.bannerPreview} />
+            ) : null}
             <Pressable onPress={pickBannerImage} style={s.secondaryBtn}>
-              <Text style={s.secondaryBtnText}>{bannerUrl ? "Change banner" : "Choose banner"}</Text>
+              <Text style={s.secondaryBtnText}>
+                {bannerUrl ? "Change banner" : "Choose banner"}
+              </Text>
             </Pressable>
           </View>
 
           <View style={s.field}>
             <Text style={s.label}>Username</Text>
-            <TextInput value={username} onChangeText={setUsername} placeholder="username" style={s.input} placeholderTextColor="#9ca3af" autoCapitalize="none" />
+            <TextInput
+              value={username}
+              onChangeText={setUsername}
+              placeholder="username"
+              style={s.input}
+              placeholderTextColor="#9ca3af"
+              autoCapitalize="none"
+            />
           </View>
 
           <View style={s.field}>
             <Text style={s.label}>Display name</Text>
-            <TextInput value={displayName} onChangeText={setDisplayName} placeholder="Your name" style={s.input} placeholderTextColor="#9ca3af" />
+            <TextInput
+              value={displayName}
+              onChangeText={setDisplayName}
+              placeholder="Your name"
+              style={s.input}
+              placeholderTextColor="#9ca3af"
+            />
           </View>
 
           <View style={s.field}>
             <Text style={s.label}>Bio</Text>
-            <TextInput value={bio} onChangeText={setBio} placeholder="Tell people about yourself" multiline style={[s.input, s.textarea]} placeholderTextColor="#9ca3af" />
+            <TextInput
+              value={bio}
+              onChangeText={setBio}
+              placeholder="Tell people about yourself"
+              multiline
+              style={[s.input, s.textarea]}
+              placeholderTextColor="#9ca3af"
+            />
+          </View>
+
+          <View style={s.field}>
+            <Text style={s.label}>Social handles</Text>
+            {isPremium ? (
+              <>
+                <TextInput
+                  value={instagramHandle}
+                  onChangeText={setInstagramHandle}
+                  placeholder="Instagram handle"
+                  style={s.input}
+                  autoCapitalize="none"
+                  placeholderTextColor="#9ca3af"
+                />
+                <TextInput
+                  value={tiktokHandle}
+                  onChangeText={setTiktokHandle}
+                  placeholder="TikTok handle"
+                  style={[s.input, s.socialInput]}
+                  autoCapitalize="none"
+                  placeholderTextColor="#9ca3af"
+                />
+                <TextInput
+                  value={twitterHandle}
+                  onChangeText={setTwitterHandle}
+                  placeholder="Twitter/X handle"
+                  style={[s.input, s.socialInput]}
+                  autoCapitalize="none"
+                  placeholderTextColor="#9ca3af"
+                />
+                <TextInput
+                  value={snapchatHandle}
+                  onChangeText={setSnapchatHandle}
+                  placeholder="Snapchat handle"
+                  style={[s.input, s.socialInput]}
+                  autoCapitalize="none"
+                  placeholderTextColor="#9ca3af"
+                />
+              </>
+            ) : (
+              <Text style={s.placeholderText}>
+                Premium required to add social handles. Upgrade to unlock this
+                section.
+              </Text>
+            )}
+          </View>
+
+          <View style={s.field}>
+            <Text style={s.label}>Profile outline color</Text>
+            {isPremium ? (
+              <View style={s.accentPickerRow}>
+                {ACCENT_COLOR_PRESETS.map((color) => {
+                  const selected = accentColor === color;
+                  const savingThis = customizationSavingColor === color;
+                  return (
+                    <Pressable
+                      key={color}
+                      disabled={savingThis || customizationLoading}
+                      onPress={() => {
+                        void saveAccentColor(color);
+                      }}
+                      style={[
+                        s.accentSwatch,
+                        { backgroundColor: color },
+                        selected && s.accentSwatchSelected,
+                        (savingThis || customizationLoading) && {
+                          opacity: 0.7,
+                        },
+                      ]}
+                    >
+                      {selected ? (
+                        <MaterialCommunityIcons
+                          name="check"
+                          size={15}
+                          color="#fff"
+                        />
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={s.placeholderText}>
+                Premium unlocks custom profile outline colors.
+              </Text>
+            )}
           </View>
         </View>
         {renderSectionActions()}
@@ -599,28 +745,21 @@ export default function EditProfileScreen() {
   function renderPrivacySection() {
     return (
       <>
-        {renderSectionHeader("Review what is currently visible on your profile.")}
+        {renderSectionHeader("Control visibility for profile and map details.")}
         <View style={s.settingsSectionCard}>
           <View style={s.infoRow}>
             <Text style={s.label}>Profile visibility</Text>
-            <Text style={s.placeholderText}>Your CarMeet profile is visible through current app profile rules.</Text>
+            <Text style={s.placeholderText}>
+              Your CarMeet profile is visible through current app profile rules.
+            </Text>
           </View>
           <View style={s.infoRow}>
             <Text style={s.label}>Social handles visibility</Text>
             <Text style={s.placeholderText}>
-              Handles appear on your profile and map card when saved. Leave a handle blank to hide it.
+              Handles appear on your profile and map card when saved. Leave a
+              handle blank to hide it.
             </Text>
           </View>
-        </View>
-      </>
-    );
-  }
-
-  function renderLocationSection() {
-    return (
-      <>
-        {renderSectionHeader("Control how your saved location appears.")}
-        <View style={s.settingsSectionCard}>
           <View style={s.field}>
             <Text style={s.label}>Location visibility</Text>
             <View style={s.locationRow}>
@@ -630,19 +769,32 @@ export default function EditProfileScreen() {
                   <Pressable
                     key={val}
                     onPress={() => setLocationVis(val)}
-                    style={[s.locationOption, selected && s.locationOptionSelected]}
+                    style={[
+                      s.locationOption,
+                      selected && s.locationOptionSelected,
+                    ]}
                   >
-                    <Text style={[s.locationOptionText, selected && s.locationOptionTextSelected]}>{val}</Text>
+                    <Text
+                      style={[
+                        s.locationOptionText,
+                        selected && s.locationOptionTextSelected,
+                      ]}
+                    >
+                      {val}
+                    </Text>
                   </Pressable>
                 );
               })}
             </View>
           </View>
           <Text style={s.placeholderText}>
-            {hasLocation ? `Current profile location: ${locationText}` : "No city or state is saved yet."}
+            {hasLocation
+              ? `Current profile location: ${locationText}`
+              : "No city or state is saved yet."}
           </Text>
           <Text style={[s.placeholderText, s.settingsHelperText]}>
-            Your saved location is managed by CarMeet location services; this setting controls who can see it on the map and profile.
+            Your saved location is managed by CarMeet location services; this
+            setting controls who can see it on the map and profile.
           </Text>
         </View>
         {renderSectionActions()}
@@ -650,61 +802,25 @@ export default function EditProfileScreen() {
     );
   }
 
-  function renderSocialSection() {
+  function renderSubscriptionSection() {
     return (
       <>
-        {renderSectionHeader("Connect your social profiles.")}
+        {renderSectionHeader("View premium status and gated features.")}
         <View style={s.settingsSectionCard}>
-          <Text style={s.sectionTitle}>Social handles</Text>
-          {isPremium ? (
-            <>
-              <TextInput value={instagramHandle} onChangeText={setInstagramHandle} placeholder="Instagram handle" style={s.input} autoCapitalize="none" placeholderTextColor="#9ca3af" />
-              <TextInput value={tiktokHandle} onChangeText={setTiktokHandle} placeholder="TikTok handle" style={[s.input, s.socialInput]} autoCapitalize="none" placeholderTextColor="#9ca3af" />
-              <TextInput value={twitterHandle} onChangeText={setTwitterHandle} placeholder="Twitter/X handle" style={[s.input, s.socialInput]} autoCapitalize="none" placeholderTextColor="#9ca3af" />
-              <TextInput value={snapchatHandle} onChangeText={setSnapchatHandle} placeholder="Snapchat handle" style={[s.input, s.socialInput]} autoCapitalize="none" placeholderTextColor="#9ca3af" />
-            </>
-          ) : (
-            <Text style={s.placeholderText}>Premium required to add social handles. Upgrade to unlock this section.</Text>
-          )}
-        </View>
-        {isPremium ? renderSectionActions() : null}
-      </>
-    );
-  }
-
-  function renderAppearanceSection() {
-    return (
-      <>
-        {renderSectionHeader("Customize premium profile styling.")}
-        <View style={s.settingsSectionCard}>
-          <Text style={s.sectionTitle}>Profile outline color</Text>
-          {isPremium ? (
-            <View style={s.accentPickerRow}>
-              {ACCENT_COLOR_PRESETS.map((color) => {
-                const selected = accentColor === color;
-                const savingThis = customizationSavingColor === color;
-                return (
-                  <Pressable
-                    key={color}
-                    disabled={savingThis || customizationLoading}
-                    onPress={() => {
-                      void saveAccentColor(color);
-                    }}
-                    style={[
-                      s.accentSwatch,
-                      { backgroundColor: color },
-                      selected && s.accentSwatchSelected,
-                      (savingThis || customizationLoading) && { opacity: 0.7 },
-                    ]}
-                  >
-                    {selected ? <MaterialCommunityIcons name="check" size={15} color="#fff" /> : null}
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : (
-            <Text style={s.placeholderText}>Premium unlocks custom profile outline colors.</Text>
-          )}
+          <View style={s.infoRow}>
+            <Text style={s.label}>Current plan</Text>
+            <Text style={s.placeholderText}>
+              {membershipPlan === "premium" ? "Premium" : "Free"} -{" "}
+              {membershipStatus}
+            </Text>
+          </View>
+          <View style={s.infoRow}>
+            <Text style={s.label}>Premium profile features</Text>
+            <Text style={s.placeholderText}>
+              Premium unlocks social handles and custom profile outline colors
+              in Profile settings.
+            </Text>
+          </View>
         </View>
       </>
     );
@@ -717,12 +833,22 @@ export default function EditProfileScreen() {
         <View style={s.settingsSectionCard}>
           <View style={s.infoRow}>
             <Text style={s.label}>Email</Text>
-            <Text style={s.placeholderText}>{email ?? "No email available"}</Text>
+            <Text style={s.placeholderText}>
+              {email ?? "No email available"}
+            </Text>
           </View>
         </View>
         <View style={s.signOutWrap}>
-          <Pressable onPress={handleSignOut} disabled={signingOut} style={[s.signOutButton, signingOut && { opacity: 0.7 }]}>
-            {signingOut ? <ActivityIndicator /> : <Text style={s.signOutButtonText}>Sign out</Text>}
+          <Pressable
+            onPress={handleSignOut}
+            disabled={signingOut}
+            style={[s.signOutButton, signingOut && { opacity: 0.7 }]}
+          >
+            {signingOut ? (
+              <ActivityIndicator />
+            ) : (
+              <Text style={s.signOutButtonText}>Sign out</Text>
+            )}
           </Pressable>
         </View>
       </>
@@ -732,9 +858,7 @@ export default function EditProfileScreen() {
   function renderActiveSection() {
     if (activeSection === "profile") return renderProfileSection();
     if (activeSection === "privacy") return renderPrivacySection();
-    if (activeSection === "location") return renderLocationSection();
-    if (activeSection === "social") return renderSocialSection();
-    if (activeSection === "appearance") return renderAppearanceSection();
+    if (activeSection === "subscription") return renderSubscriptionSection();
     if (activeSection === "account") return renderAccountSection();
     return renderMainSettings();
   }

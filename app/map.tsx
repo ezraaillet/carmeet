@@ -48,7 +48,7 @@ import { colors } from "@/styles/themes";
 import styles from "@/styles/mapstyles";
 import { supabase } from "../database/supabase";
 import { useFocusEffect } from "@react-navigation/native";
-import { useMapData } from "@/components/MapDataProvider";
+import { PUBLIC_DISCOVERY_RADIUS_METERS, useMapData } from "@/components/MapDataProvider";
 
 const MARKER_JITTER_THRESHOLD_METERS = 2;
 const MARKER_SNAP_THRESHOLD_METERS = 350;
@@ -124,6 +124,18 @@ function getProfileMarkerAvatar(profile: Profile | undefined, userId: string): M
     initials: getMarkerInitials(markerName),
     borderColor: getProfileMarkerBorderColor(profile),
   };
+}
+
+function isPubliclyDiscoverableProfile(profile: Profile | undefined) {
+  if (!profile) return false;
+
+  const locationVisibility = (profile.location_visibility ?? "everyone").toLowerCase();
+  const profileVisibility = (profile.profile_visibility ?? "public").toLowerCase();
+
+  return (
+    locationVisibility === "everyone" &&
+    (profileVisibility === "public" || profileVisibility === "everyone")
+  );
 }
 
 
@@ -835,6 +847,10 @@ export default function MapScreen() {
     // Profile availability only changes marker presentation, never inclusion.
     const friendIdSet = new Set(friendIds);
     const baseLocationsById = new Map<string, LiveLoc>();
+    const myLocation =
+      effectiveMyUserId && locationsById[effectiveMyUserId]
+        ? locationsById[effectiveMyUserId]
+        : null;
 
     friendIds.forEach((friendId) => {
       const friendLocation = locationsById[friendId];
@@ -853,7 +869,17 @@ export default function MapScreen() {
       }
     });
 
-    const baseLocations = Array.from(baseLocationsById.values());
+    const baseLocations = Array.from(baseLocationsById.values()).filter((loc) => {
+      if (loc.user_id === effectiveMyUserId || friendIdSet.has(loc.user_id)) {
+        return true;
+      }
+
+      if (!myLocation) return false;
+      const profile = profilesById[loc.user_id];
+      if (!isPubliclyDiscoverableProfile(profile)) return false;
+
+      return distanceInMeters(myLocation, loc) <= PUBLIC_DISCOVERY_RADIUS_METERS;
+    });
     const clusterableLocations = baseLocations.filter(
       (loc) => loc.user_id !== effectiveMyUserId && !friendIdSet.has(loc.user_id)
     );
@@ -974,6 +1000,7 @@ export default function MapScreen() {
     friendIds,
     locationsById,
     markerDataSignature,
+    profilesById,
     region.latitudeDelta,
     shouldShowClusters,
     sourceLocations,
