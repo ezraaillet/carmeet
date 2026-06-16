@@ -63,7 +63,7 @@ const OTHER_USER_MARKER_Z_INDEX = 100;
 const MY_USER_MARKER_Z_INDEX = 900;
 const MEET_MARKER_Z_INDEX = 1000;
 const CLUSTER_MARKER_Z_INDEX = 1200;
-const FOCUS_ME_CAMERA_ZOOM = 17;
+const FOCUS_ME_LATITUDE_DELTA = 0.0022;
 
 
 type UserMarkerItem = {
@@ -482,12 +482,13 @@ export default function MapScreen() {
   const hasUserMovedMapRef = useRef(false);
   const isProgrammaticCameraMoveRef = useRef(false);
   const selectedMeetIdRef = useRef<string | null>(null);
-  const { height: screenHeight } = useWindowDimensions();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const profileCardMaxHeight = Math.min(screenHeight * 0.78, 640);
   const collapsedSheetHeight = Math.round(screenHeight * 0.33);
   const expandedSheetHeight = Math.round(screenHeight * 0.76);
   const sheetHeightAnim = useRef(new Animated.Value(collapsedSheetHeight)).current;
   const sheetDragStartHeightRef = useRef(collapsedSheetHeight);
+  const sheetVisibleHeightRef = useRef(collapsedSheetHeight);
 
   const {
     profilesById,
@@ -1269,12 +1270,15 @@ export default function MapScreen() {
   useEffect(() => {
     sheetHeightAnim.setValue(collapsedSheetHeight);
     sheetDragStartHeightRef.current = collapsedSheetHeight;
+    sheetVisibleHeightRef.current = collapsedSheetHeight;
   }, [collapsedSheetHeight, sheetHeightAnim]);
 
   const animateSheetTo = useCallback(
     (nextHeight: number) => {
+      const clampedHeight = Math.max(collapsedSheetHeight, Math.min(expandedSheetHeight, nextHeight));
+      sheetVisibleHeightRef.current = clampedHeight;
       Animated.spring(sheetHeightAnim, {
-        toValue: Math.max(collapsedSheetHeight, Math.min(expandedSheetHeight, nextHeight)),
+        toValue: clampedHeight,
         useNativeDriver: false,
         bounciness: 0,
         speed: 18,
@@ -1282,6 +1286,7 @@ export default function MapScreen() {
         if (finished) {
           sheetHeightAnim.stopAnimation((value) => {
             sheetDragStartHeightRef.current = value;
+            sheetVisibleHeightRef.current = value;
           });
         }
       });
@@ -1297,13 +1302,14 @@ export default function MapScreen() {
         onPanResponderGrant: () => {
           sheetHeightAnim.stopAnimation((value) => {
             sheetDragStartHeightRef.current = value;
+            sheetVisibleHeightRef.current = value;
           });
         },
         onPanResponderMove: (_evt, gestureState) => {
           const nextHeight = sheetDragStartHeightRef.current - gestureState.dy;
-          sheetHeightAnim.setValue(
-            Math.max(collapsedSheetHeight, Math.min(expandedSheetHeight, nextHeight))
-          );
+          const clampedHeight = Math.max(collapsedSheetHeight, Math.min(expandedSheetHeight, nextHeight));
+          sheetHeightAnim.setValue(clampedHeight);
+          sheetVisibleHeightRef.current = clampedHeight;
         },
         onPanResponderRelease: (_evt, gestureState) => {
           const draggedHeight = sheetDragStartHeightRef.current - gestureState.dy;
@@ -1356,14 +1362,27 @@ export default function MapScreen() {
 
     closeProfileCard();
     isProgrammaticCameraMoveRef.current = true;
-    mapRef.current.animateCamera(
-      {
-        center: target,
-        zoom: FOCUS_ME_CAMERA_ZOOM,
-      },
-      { duration: 700 }
+    const sheetHeight = Math.min(
+      screenHeight,
+      Math.max(0, sheetVisibleHeightRef.current)
     );
-  }, [currentUserLocation, effectiveMyUserId, setMyLiveLocation]);
+    const visibleMapHeight = Math.max(1, screenHeight - sheetHeight);
+    const latitudeOffset =
+      (FOCUS_ME_LATITUDE_DELTA * (screenHeight - visibleMapHeight)) /
+      (2 * screenHeight);
+    const longitudeDelta =
+      FOCUS_ME_LATITUDE_DELTA * (screenWidth / visibleMapHeight);
+
+    mapRef.current.animateToRegion(
+      {
+        latitude: target.latitude - latitudeOffset,
+        longitude: target.longitude,
+        latitudeDelta: FOCUS_ME_LATITUDE_DELTA,
+        longitudeDelta,
+      },
+      700
+    );
+  }, [currentUserLocation, effectiveMyUserId, screenHeight, screenWidth, setMyLiveLocation]);
 
   const toggleMeetMarkers = useCallback(() => {
     setShowMeetPins((visible) => !visible);
