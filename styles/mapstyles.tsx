@@ -565,6 +565,163 @@ const mapStyles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
   },
+  meetsDetailSheetContent: {
+    paddingBottom: 20,
+  },
+  meetDetailCard: {
+    backgroundColor: "transparent",
+    paddingHorizontal: 4,
+    paddingBottom: 2,
+  },
+  meetDetailHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  meetDetailTitleWrap: {
+    flex: 1,
+  },
+  meetDetailTitle: {
+    color: "#fff",
+    fontSize: 19,
+    lineHeight: 23,
+    fontWeight: "800",
+  },
+  meetDetailMeta: {
+    marginTop: 5,
+    color: "#bdbdbd",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  meetDetailCloseButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  meetDetailRsvpRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 14,
+  },
+  meetDetailRsvpButton: {
+    minWidth: 112,
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    backgroundColor: "#252525",
+  },
+  meetDetailRsvpButtonSelected: {
+    backgroundColor: "#f3f3f3",
+  },
+  meetDetailRsvpButtonGoing: {
+    backgroundColor: "#ff4b36",
+  },
+  meetDetailRsvpButtonText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  meetDetailRsvpButtonTextSelected: {
+    color: "#111",
+  },
+  meetDetailInfoPanel: {
+    marginTop: 12,
+    borderRadius: 10,
+    backgroundColor: "#151515",
+    padding: 12,
+    flexDirection: "row",
+    gap: 14,
+  },
+  meetDetailDateColumn: {
+    width: 50,
+    alignItems: "center",
+  },
+  meetDetailDateDay: {
+    color: "#fff",
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: "900",
+  },
+  meetDetailDateMonth: {
+    color: "#cfcfcf",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  meetDetailDateTime: {
+    marginTop: 4,
+    color: "#bcbcbc",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  meetDetailAddressColumn: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  meetDetailAddressText: {
+    color: "#f3f3f3",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+  meetDetailStatusText: {
+    marginTop: 5,
+    color: "#ef4444",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  meetDetailDescription: {
+    marginTop: 10,
+    color: "#cfcfcf",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  meetDetailActionRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 10,
+  },
+  meetDetailDirectionsButton: {
+    flex: 1,
+    borderRadius: 8,
+    backgroundColor: "#ff4b36",
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  meetDetailDirectionsButtonText: {
+    color: "#111",
+    fontWeight: "900",
+    fontSize: 13,
+  },
+  meetDetailAddButton: {
+    minWidth: 88,
+    borderRadius: 8,
+    backgroundColor: "#2a2a2a",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  meetDetailAddButtonText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+  meetDetailActionDisabled: {
+    opacity: 0.5,
+  },
 });
 
 export default mapStyles;

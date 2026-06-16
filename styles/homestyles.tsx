@@ -225,6 +225,168 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
+  createPremiumScreen: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    backgroundColor: colors.black,
+  },
+  createPremiumCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    backgroundColor: colors.charcoal,
+    padding: 20,
+  },
+  createPremiumIconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(225, 6, 0, 0.14)",
+    marginBottom: 14,
+  },
+  createPremiumTitle: {
+    color: colors.offwhite,
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  createPremiumSubtitle: {
+    color: colors.silver,
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 8,
+  },
+  createPremiumFeatureList: {
+    gap: 12,
+    marginTop: 18,
+  },
+  createPremiumFeatureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  createPremiumFeatureText: {
+    flex: 1,
+    color: colors.offwhite,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600",
+  },
+  createPremiumButton: {
+    marginTop: 20,
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: "center",
+    backgroundColor: colors.primary,
+  },
+  createPremiumButtonText: {
+    color: colors.offwhite,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  createScreen: {
+    flex: 1,
+    backgroundColor: colors.black,
+  },
+  createScroll: {
+    flex: 1,
+    backgroundColor: colors.black,
+  },
+  createContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 34,
+  },
+  createHeader: {
+    marginBottom: 14,
+  },
+  createTitle: {
+    color: colors.offwhite,
+    fontSize: 28,
+    fontWeight: "900",
+  },
+  createSubtitle: {
+    color: colors.silver,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 5,
+  },
+  createFormCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.gunmetal,
+    backgroundColor: colors.charcoal,
+    padding: 14,
+  },
+  createTwoColumnRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  createTwoColumnField: {
+    flex: 1,
+  },
+  createSecondaryAction: {
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.steel,
+    backgroundColor: colors.gunmetal,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  createSecondaryActionText: {
+    color: colors.offwhite,
+    fontWeight: "800",
+  },
+  createDescriptionInput: {
+    minHeight: 96,
+    textAlignVertical: "top",
+  },
+  createVisibilityToggle: {
+    height: 46,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.steel,
+    backgroundColor: colors.gunmetal,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  createVisibilityToggleActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  createVisibilityToggleText: {
+    color: colors.offwhite,
+    fontWeight: "800",
+  },
+  createVisibilityToggleTextActive: {
+    color: colors.black,
+  },
+  createSubmitButton: {
+    marginTop: 8,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    backgroundColor: colors.primary,
+  },
+  createSubmitButtonText: {
+    color: colors.offwhite,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+
   // Top tab row
   homeTabsContainer: {
     flexDirection: "row",

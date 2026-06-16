@@ -31,7 +31,6 @@ import {
   distanceInMeters,
   formatLastSeen,
   formatMeetStatus,
-  formatMeetWhen,
   isFresh,
 } from "@/features/map/mapHelpers";
 import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
@@ -495,7 +494,9 @@ export default function MapScreen() {
     locationsById,
     friendIds,
     meets,
+    myMeetAttendanceByMeetId,
     meetAttendeeSummaryByMeetId,
+    refreshMeets,
     loading: mapDataLoading,
     myUserId: mapDataUserId,
     setMyLiveLocation,
@@ -528,6 +529,7 @@ export default function MapScreen() {
     useState<FriendRelationshipState>("none");
 
   const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
+  const [meetAttendanceSavingStatus, setMeetAttendanceSavingStatus] = useState<string | null>(null);
   const [meetSearchQuery, setMeetSearchQuery] = useState("");
   const [showMeetPins, setShowMeetPins] = useState(true);
   const [clusterMarkerRedrawVersion, setClusterMarkerRedrawVersion] = useState(0);
@@ -1257,6 +1259,26 @@ export default function MapScreen() {
     if (!selectedMeet) return false;
     return Number.isFinite(selectedMeet.latitude) && Number.isFinite(selectedMeet.longitude);
   }, [selectedMeet]);
+  const selectedMeetDate = useMemo(() => {
+    if (!selectedMeet?.start_time) return null;
+    const date = new Date(selectedMeet.start_time);
+    if (!Number.isFinite(date.getTime())) return null;
+
+    return {
+      day: String(date.getDate()).padStart(2, "0"),
+      month: date.toLocaleString(undefined, { month: "short" }),
+      time: date.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    };
+  }, [selectedMeet?.start_time]);
+  const selectedMeetAttendanceStatus = selectedMeet
+    ? myMeetAttendanceByMeetId[selectedMeet.id] ?? null
+    : null;
+  const selectedMeetAttendanceSummary = selectedMeet
+    ? meetAttendeeSummaryByMeetId[selectedMeet.id] ?? { going: 0, interested: 0 }
+    : { going: 0, interested: 0 };
   const filteredMeetMarkers = useMemo(() => {
     const normalized = meetSearchQuery.trim().toLowerCase();
     if (!normalized) return meetMarkers;
@@ -1403,6 +1425,167 @@ export default function MapScreen() {
 
     await ExpoLinking.openURL(directionsUrl);
   }, [selectedMeet, selectedMeetHasCoordinates]);
+
+  const updateSelectedMeetAttendance = useCallback(
+    async (status: "going" | "interested") => {
+      if (!selectedMeet || !effectiveMyUserId || meetAttendanceSavingStatus) return;
+
+      try {
+        setMeetAttendanceSavingStatus(status);
+        const { error } = await supabase.from("meet_attendees").upsert(
+          {
+            meet_id: selectedMeet.id,
+            user_id: effectiveMyUserId,
+            status,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "meet_id,user_id" }
+        );
+
+        if (error) {
+          Alert.alert("Could not update meet", error.message);
+          return;
+        }
+
+        await refreshMeets(effectiveMyUserId);
+      } finally {
+        setMeetAttendanceSavingStatus(null);
+      }
+    },
+    [effectiveMyUserId, meetAttendanceSavingStatus, refreshMeets, selectedMeet]
+  );
+
+  function renderSelectedMeetDetails() {
+    if (!selectedMeet) return null;
+
+    return (
+      <View style={styles.meetDetailCard}>
+        <View style={styles.meetDetailHeader}>
+          <View style={styles.meetDetailTitleWrap}>
+            <Text style={styles.meetDetailTitle}>
+              {selectedMeet.title || "Meet"}
+            </Text>
+            <Text style={styles.meetDetailMeta}>
+              0 Friends • {selectedMeetAttendanceSummary.going} Going •{" "}
+              {selectedMeetAttendanceSummary.interested} Interested
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => setSelectedMeetId(null)}
+            style={styles.meetDetailCloseButton}
+            accessibilityRole="button"
+            accessibilityLabel="Close meet details"
+          >
+            <MaterialCommunityIcons name="close" size={16} color="#d6d6d6" />
+          </Pressable>
+        </View>
+
+        <View style={styles.meetDetailRsvpRow}>
+          {(["going", "interested"] as const).map((status) => {
+            const selected = selectedMeetAttendanceStatus === status;
+            const saving = meetAttendanceSavingStatus === status;
+            const icon =
+              status === "going" ? "check-circle-outline" : "help-circle-outline";
+            const label = status === "going" ? "Going" : "Interested";
+
+            return (
+              <Pressable
+                key={status}
+                onPress={() => {
+                  void updateSelectedMeetAttendance(status);
+                }}
+                disabled={Boolean(meetAttendanceSavingStatus)}
+                style={[
+                  styles.meetDetailRsvpButton,
+                  selected && styles.meetDetailRsvpButtonSelected,
+                  status === "going" &&
+                    selected &&
+                    styles.meetDetailRsvpButtonGoing,
+                  saving && { opacity: 0.75 },
+                ]}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name={icon}
+                      size={18}
+                      color={selected ? "#111" : "#fff"}
+                    />
+                    <Text
+                      style={[
+                        styles.meetDetailRsvpButtonText,
+                        selected && styles.meetDetailRsvpButtonTextSelected,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View style={styles.meetDetailInfoPanel}>
+          <View style={styles.meetDetailDateColumn}>
+            <Text style={styles.meetDetailDateDay}>
+              {selectedMeetDate?.day ?? "--"}
+            </Text>
+            <Text style={styles.meetDetailDateMonth}>
+              {selectedMeetDate?.month ?? "TBD"}
+            </Text>
+            <Text style={styles.meetDetailDateTime}>
+              {selectedMeetDate?.time ?? "TBD"}
+            </Text>
+          </View>
+          <View style={styles.meetDetailAddressColumn}>
+            <Text style={styles.meetDetailAddressText}>
+              {selectedMeet.address || selectedMeet.location_name || "Location TBD"}
+            </Text>
+            <Text style={styles.meetDetailStatusText}>
+              {formatMeetStatus(selectedMeet.status)}
+            </Text>
+          </View>
+        </View>
+
+        {selectedMeet.description ? (
+          <Text style={styles.meetDetailDescription} numberOfLines={3}>
+            {selectedMeet.description}
+          </Text>
+        ) : null}
+
+        <View style={styles.meetDetailActionRow}>
+          <Pressable
+            style={[
+              styles.meetDetailDirectionsButton,
+              !selectedMeetHasCoordinates && styles.meetDetailActionDisabled,
+            ]}
+            disabled={!selectedMeetHasCoordinates}
+            onPress={handleGetDirections}
+          >
+            <MaterialCommunityIcons
+              name="navigation-variant-outline"
+              size={18}
+              color="#111"
+            />
+            <Text style={styles.meetDetailDirectionsButtonText}>Directions</Text>
+          </Pressable>
+          <Pressable
+            style={styles.meetDetailAddButton}
+            onPress={() => {
+              void updateSelectedMeetAttendance("interested");
+            }}
+            disabled={Boolean(meetAttendanceSavingStatus)}
+          >
+            <MaterialCommunityIcons name="calendar-plus" size={18} color="#fff" />
+            <Text style={styles.meetDetailAddButtonText}>Add</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   const handleMarkerPress = useCallback(
     async (userId: string) => {
@@ -1765,24 +1948,29 @@ export default function MapScreen() {
           <View style={styles.meetsSheetHandleWrap}>
             <View style={styles.meetsSheetHandle} />
           </View>
-          <View style={styles.meetsSearchBar}>
-            <TextInput
-              value={meetSearchQuery}
-              onChangeText={setMeetSearchQuery}
-              placeholder="Search upcoming meets"
-              placeholderTextColor="#8a8a8a"
-              style={styles.meetsSearchInput}
-            />
-            <View pointerEvents="none" style={styles.meetsSearchIconWrap}>
-              <MaterialCommunityIcons name="magnify" style={styles.meetsSearchIcon} />
+          {!selectedMeet ? (
+            <View style={styles.meetsSearchBar}>
+              <TextInput
+                value={meetSearchQuery}
+                onChangeText={setMeetSearchQuery}
+                placeholder="Search upcoming meets"
+                placeholderTextColor="#8a8a8a"
+                style={styles.meetsSearchInput}
+              />
+              <View pointerEvents="none" style={styles.meetsSearchIconWrap}>
+                <MaterialCommunityIcons name="magnify" style={styles.meetsSearchIcon} />
+              </View>
             </View>
-          </View>
+          ) : null}
           <ScrollView
             style={styles.meetsListScroll}
-            contentContainerStyle={styles.meetsListContent}
+            contentContainerStyle={[
+              styles.meetsListContent,
+              selectedMeet && styles.meetsDetailSheetContent,
+            ]}
             showsVerticalScrollIndicator={false}
           >
-            {filteredMeetMarkers.map((meet) => {
+            {selectedMeet ? renderSelectedMeetDetails() : filteredMeetMarkers.map((meet) => {
               const day = meet.start_time ? new Date(meet.start_time) : null;
               const dateTop = day && Number.isFinite(day.getTime()) ? String(day.getDate()).padStart(2, "0") : "--";
               const dateBottom = day && Number.isFinite(day.getTime()) ? day.toLocaleString(undefined, { month: "short" }).toUpperCase() : "TBD";
@@ -1832,46 +2020,6 @@ export default function MapScreen() {
           </ScrollView>
         </View>
       </Animated.View>
-
-      {selectedMeet && (
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardName}>{selectedMeet.title || "Meet"}</Text>
-                <Text style={styles.cardSub}>
-                  {selectedMeet.location_name || selectedMeet.address || "Location TBD"}
-                </Text>
-                <Text style={styles.cardSubSmall}>
-                  {formatMeetWhen(selectedMeet.start_time, selectedMeet.end_time)}
-                </Text>
-                <Text style={styles.cardSubSmall}>
-                  {formatMeetStatus(selectedMeet.status)} · {meetAttendeeSummaryByMeetId[selectedMeet.id]?.going ?? 0} going
-                </Text>
-              </View>
-
-              <Pressable onPress={() => setSelectedMeetId(null)} style={styles.closeBtn}>
-                <Text style={styles.closeBtnText}>✕</Text>
-              </Pressable>
-            </View>
-
-            {selectedMeet.description ? (
-              <Text style={styles.meetDescriptionText} numberOfLines={3}>
-                {selectedMeet.description}
-              </Text>
-            ) : null}
-
-            {selectedMeetHasCoordinates ? (
-              <Pressable style={styles.getDirectionsBtn} onPress={handleGetDirections}>
-                <Text style={styles.getDirectionsBtnText}>
-                  {selectedMeet.title ? `Get Directions to ${selectedMeet.title}` : "Get Directions"}
-                </Text>
-              </Pressable>
-            ) : null}
-
-          </View>
-        </View>
-      )}
 
       {selectedUserId && !selectedMeetId && (
         <View style={styles.cardContainer}>
