@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -28,21 +29,103 @@ type MembershipRow = {
   status: "active" | "inactive" | "cancelled" | "past_due" | "trialing";
 };
 
-function defaultStartValue() {
-  const date = new Date(Date.now() + 60 * 60 * 1000);
-  date.setMinutes(0, 0, 0);
-  return date.toISOString().slice(0, 16);
+type MeetCoordinates = {
+  latitude: number;
+  longitude: number;
+};
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-function parseDateInput(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
+function defaultMeetDate() {
+  return localDateKey(new Date());
+}
 
-  const normalized = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T");
-  const parsed = new Date(normalized);
+function dateFromKey(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0, 0);
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  next.setHours(12, 0, 0, 0);
+  return next;
+}
+
+function addMonths(date: Date, months: number) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1, 12, 0, 0, 0);
+}
+
+function monthStartForKey(dateKey: string) {
+  const date = dateFromKey(dateKey);
+  return new Date(date.getFullYear(), date.getMonth(), 1, 12, 0, 0, 0);
+}
+
+function buildCalendarDays(monthDate: Date) {
+  const firstOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1, 12, 0, 0, 0);
+  const mondayOffset = (firstOfMonth.getDay() + 6) % 7;
+  const firstCalendarDay = addDays(firstOfMonth, -mondayOffset);
+  return Array.from({ length: 42 }, (_unused, index) => addDays(firstCalendarDay, index));
+}
+
+function toDateKey(date: Date) {
+  return localDateKey(date);
+}
+
+function combineDateAndTime(dateKey: string, timeValue: string) {
+  const parsed = new Date(`${dateKey}T${timeValue}:00`);
   if (!Number.isFinite(parsed.getTime())) return null;
 
   return parsed.toISOString();
+}
+
+const TIME_OPTIONS = [
+  "06:00",
+  "07:00",
+  "08:00",
+  "09:00",
+  "10:00",
+  "11:00",
+  "12:00",
+  "13:00",
+  "14:00",
+  "15:00",
+  "16:00",
+  "17:00",
+  "18:00",
+  "19:00",
+  "20:00",
+  "21:00",
+  "22:00",
+  "23:00",
+];
+
+const CALENDAR_WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+const END_TIME_OPTIONS = ["", ...TIME_OPTIONS];
+
+function formatDateOption(dateKey: string) {
+  return dateFromKey(dateKey).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatTimeOption(value: string) {
+  const [hourRaw, minuteRaw] = value.split(":");
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export default function CreateScreen() {
@@ -58,12 +141,20 @@ export default function CreateScreen() {
   const [description, setDescription] = useState("");
   const [locationName, setLocationName] = useState("");
   const [address, setAddress] = useState("");
-  const [latitude, setLatitude] = useState("");
-  const [longitude, setLongitude] = useState("");
-  const [startTime, setStartTime] = useState(defaultStartValue);
+  const [coordinates, setCoordinates] = useState<MeetCoordinates | null>(null);
+  const [selectedDate, setSelectedDate] = useState(defaultMeetDate);
+  const [visibleMonth, setVisibleMonth] = useState(() => monthStartForKey(defaultMeetDate()));
+  const [startTime, setStartTime] = useState("19:00");
   const [endTime, setEndTime] = useState("");
+  const [openTimePicker, setOpenTimePicker] = useState<"start" | "end" | null>(null);
+  const [isDateTimePickerOpen, setIsDateTimePickerOpen] = useState(false);
   const [maxAttendees, setMaxAttendees] = useState("");
   const [isPublic, setIsPublic] = useState(true);
+  const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
+  const calendarWeeks = useMemo(
+    () => Array.from({ length: 6 }, (_unused, index) => calendarDays.slice(index * 7, index * 7 + 7)),
+    [calendarDays]
+  );
 
   const membershipPlan = membership?.plan ?? "free";
   const membershipStatus = membership?.status ?? "inactive";
@@ -125,12 +216,12 @@ export default function CreateScreen() {
     return (
       Boolean(title.trim()) &&
       Boolean(locationName.trim()) &&
-      Boolean(latitude.trim()) &&
-      Boolean(longitude.trim()) &&
+      (Boolean(address.trim()) || Boolean(coordinates)) &&
+      Boolean(selectedDate) &&
       Boolean(startTime.trim()) &&
       !saving
     );
-  }, [latitude, locationName, longitude, saving, startTime, title]);
+  }, [address, coordinates, locationName, saving, selectedDate, startTime, title]);
 
   async function useCurrentLocation() {
     setLocating(true);
@@ -145,8 +236,10 @@ export default function CreateScreen() {
         accuracy: Location.Accuracy.Balanced,
       });
 
-      setLatitude(String(pos.coords.latitude));
-      setLongitude(String(pos.coords.longitude));
+      setCoordinates({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+      });
       if (!locationName.trim()) setLocationName("Current location");
     } catch (e: any) {
       Alert.alert("Could not get location", e?.message ?? "Try again.");
@@ -155,15 +248,30 @@ export default function CreateScreen() {
     }
   }
 
+  function pickDate(dateKey: string) {
+    setSelectedDate(dateKey);
+    setVisibleMonth(monthStartForKey(dateKey));
+  }
+
+  const todayKey = localDateKey(new Date());
+  const tomorrowKey = toDateKey(addDays(new Date(), 1));
+  const activeQuickDate =
+    selectedDate === todayKey ? "today" : selectedDate === tomorrowKey ? "tomorrow" : "more";
+  const monthLabel = visibleMonth.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+  const dateTimeSummary = `${formatDateOption(selectedDate)} / ${formatTimeOption(startTime)}${
+    endTime ? ` - ${formatTimeOption(endTime)}` : ""
+  }`;
+
   async function createMeet() {
     if (!myUserId || !isPremium) return;
 
     setError(null);
 
-    const parsedStart = parseDateInput(startTime);
-    const parsedEnd = endTime.trim() ? parseDateInput(endTime) : null;
-    const parsedLat = Number(latitude.trim());
-    const parsedLng = Number(longitude.trim());
+    const parsedStart = combineDateAndTime(selectedDate, startTime);
+    const parsedEnd = endTime ? combineDateAndTime(selectedDate, endTime) : null;
     const parsedMax = maxAttendees.trim() ? Number.parseInt(maxAttendees.trim(), 10) : null;
 
     if (!title.trim() || !locationName.trim()) {
@@ -171,18 +279,18 @@ export default function CreateScreen() {
       return;
     }
 
-    if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
-      setError("Latitude and longitude are required.");
+    if (!address.trim() && !coordinates) {
+      setError("Address is required unless you use current location.");
       return;
     }
 
     if (!parsedStart) {
-      setError("Start time must look like 2026-06-15T19:00.");
+      setError("Choose a valid date and start time.");
       return;
     }
 
-    if (endTime.trim() && !parsedEnd) {
-      setError("End time must look like 2026-06-15T21:00.");
+    if (endTime && !parsedEnd) {
+      setError("Choose a valid end time.");
       return;
     }
 
@@ -193,6 +301,25 @@ export default function CreateScreen() {
 
     setSaving(true);
 
+    let resolvedCoordinates = coordinates;
+    if (!resolvedCoordinates) {
+      const geocodeQuery = [address.trim(), locationName.trim()].filter(Boolean).join(" ");
+      const geocodeResults = await Location.geocodeAsync(geocodeQuery);
+      const firstResult = geocodeResults[0];
+
+      if (!firstResult) {
+        setError("Could not find that address. Try a more specific address.");
+        setSaving(false);
+        return;
+      }
+
+      resolvedCoordinates = {
+        latitude: firstResult.latitude,
+        longitude: firstResult.longitude,
+      };
+      setCoordinates(resolvedCoordinates);
+    }
+
     const { data, error: insertErr } = await supabase
       .from("meets")
       .insert({
@@ -201,8 +328,8 @@ export default function CreateScreen() {
         cover_image_url: null,
         location_name: locationName.trim(),
         address: address.trim() || null,
-        latitude: parsedLat,
-        longitude: parsedLng,
+        latitude: resolvedCoordinates.latitude,
+        longitude: resolvedCoordinates.longitude,
         start_time: parsedStart,
         end_time: parsedEnd,
         created_by: myUserId,
@@ -314,36 +441,14 @@ export default function CreateScreen() {
           <Text style={styles.createMeetFieldLabel}>Address</Text>
           <TextInput
             value={address}
-            onChangeText={setAddress}
+            onChangeText={(value) => {
+              setAddress(value);
+              setCoordinates(null);
+            }}
             placeholder="5620 Johnston St, Lafayette, LA"
             placeholderTextColor="#8a8a8a"
             style={styles.homeInput}
           />
-
-          <View style={styles.createTwoColumnRow}>
-            <View style={styles.createTwoColumnField}>
-              <Text style={styles.createMeetFieldLabel}>Latitude</Text>
-              <TextInput
-                value={latitude}
-                onChangeText={setLatitude}
-                placeholder="30.2241"
-                placeholderTextColor="#8a8a8a"
-                keyboardType="decimal-pad"
-                style={styles.homeInput}
-              />
-            </View>
-            <View style={styles.createTwoColumnField}>
-              <Text style={styles.createMeetFieldLabel}>Longitude</Text>
-              <TextInput
-                value={longitude}
-                onChangeText={setLongitude}
-                placeholder="-92.0198"
-                placeholderTextColor="#8a8a8a"
-                keyboardType="decimal-pad"
-                style={styles.homeInput}
-              />
-            </View>
-          </View>
 
           <Pressable
             onPress={useCurrentLocation}
@@ -359,31 +464,30 @@ export default function CreateScreen() {
               </>
             )}
           </Pressable>
+          {coordinates ? (
+            <Text style={styles.createLocationResolvedText}>
+              Pin ready from {address.trim() ? "address" : "current location"}.
+            </Text>
+          ) : null}
 
-          <View style={styles.createTwoColumnRow}>
-            <View style={styles.createTwoColumnField}>
-              <Text style={styles.createMeetFieldLabel}>Start</Text>
-              <TextInput
-                value={startTime}
-                onChangeText={setStartTime}
-                placeholder="2026-06-15T19:00"
-                placeholderTextColor="#8a8a8a"
-                style={styles.homeInput}
-                autoCapitalize="none"
-              />
+          <Pressable
+            onPress={() => setIsDateTimePickerOpen(true)}
+            style={styles.createDateTimeTrigger}
+          >
+            <View style={styles.createDateTimeTriggerIcon}>
+              <MaterialCommunityIcons name="calendar-clock" size={21} color={colors.primary} />
             </View>
-            <View style={styles.createTwoColumnField}>
-              <Text style={styles.createMeetFieldLabel}>End optional</Text>
-              <TextInput
-                value={endTime}
-                onChangeText={setEndTime}
-                placeholder="2026-06-15T21:00"
-                placeholderTextColor="#8a8a8a"
-                style={styles.homeInput}
-                autoCapitalize="none"
-              />
+            <View style={styles.createDateTimeTriggerTextWrap}>
+              <Text style={styles.createDateTimeTriggerTitle}>Choose date & time</Text>
+              <Text style={styles.createDateTimeTriggerSummary}>{dateTimeSummary}</Text>
             </View>
-          </View>
+            <MaterialCommunityIcons
+              name="chevron-down"
+              size={23}
+              color={colors.silver}
+            />
+          </Pressable>
+
 
           <Text style={styles.createMeetFieldLabel}>Description</Text>
           <TextInput
@@ -445,6 +549,239 @@ export default function CreateScreen() {
           </Pressable>
         </View>
       </ScrollView>
+      <Modal
+        animationType="fade"
+        transparent
+        visible={isDateTimePickerOpen}
+        onRequestClose={() => {
+          setOpenTimePicker(null);
+          setIsDateTimePickerOpen(false);
+        }}
+      >
+        <View style={styles.createDateTimeModalBackdrop}>
+            <View style={styles.createDateTimeModalCard}>
+              <View style={styles.createDateQuickRow}>
+              <Pressable
+                onPress={() => pickDate(todayKey)}
+                style={[
+                  styles.createDateQuickButton,
+                  activeQuickDate === "today" && styles.createDateQuickButtonActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.createDateQuickButtonText,
+                    activeQuickDate === "today" && styles.createDateQuickButtonTextActive,
+                  ]}
+                >
+                  Today
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => pickDate(tomorrowKey)}
+                style={[
+                  styles.createDateQuickButton,
+                  activeQuickDate === "tomorrow" && styles.createDateQuickButtonActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.createDateQuickButtonText,
+                    activeQuickDate === "tomorrow" && styles.createDateQuickButtonTextActive,
+                  ]}
+                >
+                  Tomorrow
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setVisibleMonth(monthStartForKey(selectedDate))}
+                style={[
+                  styles.createDateQuickButton,
+                  activeQuickDate === "more" && styles.createDateQuickButtonActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.createDateQuickButtonText,
+                    activeQuickDate === "more" && styles.createDateQuickButtonTextActive,
+                  ]}
+                >
+                  More
+                </Text>
+                <MaterialCommunityIcons
+                  name="chevron-down"
+                  size={16}
+                  color={activeQuickDate === "more" ? colors.black : colors.silver}
+                />
+              </Pressable>
+            </View>
+
+            <View style={styles.createCalendarHeader}>
+              <Pressable
+                onPress={() => setVisibleMonth((month) => addMonths(month, -1))}
+                style={styles.createCalendarNavButton}
+              >
+                <MaterialCommunityIcons name="chevron-left" size={22} color={colors.offwhite} />
+              </Pressable>
+              <Text style={styles.createCalendarMonthText}>{monthLabel}</Text>
+              <Pressable
+                onPress={() => setVisibleMonth((month) => addMonths(month, 1))}
+                style={styles.createCalendarNavButton}
+              >
+                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.offwhite} />
+              </Pressable>
+            </View>
+
+            <View style={styles.createCalendarWeekRow}>
+              {CALENDAR_WEEKDAYS.map((weekday) => (
+                <Text key={weekday} style={styles.createCalendarWeekdayText}>
+                  {weekday}
+                </Text>
+              ))}
+            </View>
+
+            <View style={styles.createCalendarGrid}>
+              {calendarWeeks.map((week, weekIndex) => (
+                <View key={`week-${weekIndex}`} style={styles.createCalendarWeekDatesRow}>
+                  {week.map((date) => {
+                    const key = toDateKey(date);
+                    const selected = selectedDate === key;
+                    const muted = date.getMonth() !== visibleMonth.getMonth();
+                    const today = key === todayKey;
+
+                    return (
+                      <View key={key} style={styles.createCalendarDaySlot}>
+                        <Pressable
+                          onPress={() => pickDate(key)}
+                          style={[
+                            styles.createCalendarDayButton,
+                            today && styles.createCalendarDayToday,
+                            selected && styles.createCalendarDaySelected,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.createCalendarDayText,
+                              muted && styles.createCalendarDayTextMuted,
+                              selected && styles.createCalendarDayTextSelected,
+                            ]}
+                          >
+                            {date.getDate()}
+                          </Text>
+                          {today ? (
+                            <View
+                              style={[
+                                styles.createCalendarTodayDot,
+                                selected && styles.createCalendarTodayDotSelected,
+                              ]}
+                            />
+                          ) : null}
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.createTimeFieldGroup}>
+              <View style={styles.createTimeFieldRow}>
+                <Text style={styles.createTimeFieldLabel}>Start time</Text>
+                <Pressable
+                  onPress={() => setOpenTimePicker((current) => (current === "start" ? null : "start"))}
+                  style={styles.createTimeField}
+                >
+                  <Text style={styles.createTimeFieldText}>{formatTimeOption(startTime)}</Text>
+                  <MaterialCommunityIcons name="chevron-down" size={19} color={colors.silver} />
+                </Pressable>
+              </View>
+              {openTimePicker === "start" ? (
+                <View style={styles.createTimeDropdownGrid}>
+                  {TIME_OPTIONS.map((time) => {
+                    const selected = startTime === time;
+                    return (
+                      <Pressable
+                        key={time}
+                        onPress={() => {
+                          setStartTime(time);
+                          setOpenTimePicker(null);
+                        }}
+                        style={[
+                          styles.createTimeDropdownOption,
+                          selected && styles.createTimeDropdownOptionSelected,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.createTimeDropdownOptionText,
+                            selected && styles.createTimeDropdownOptionTextSelected,
+                          ]}
+                        >
+                          {formatTimeOption(time)}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              <View style={styles.createTimeFieldRow}>
+                <Text style={styles.createTimeFieldLabel}>End time</Text>
+                <Pressable
+                  onPress={() => setOpenTimePicker((current) => (current === "end" ? null : "end"))}
+                  style={styles.createTimeField}
+                >
+                  <Text style={styles.createTimeFieldText}>
+                    {endTime ? formatTimeOption(endTime) : "No end"}
+                  </Text>
+                  <MaterialCommunityIcons name="chevron-down" size={19} color={colors.silver} />
+                </Pressable>
+              </View>
+              {openTimePicker === "end" ? (
+                <View style={styles.createTimeDropdownGrid}>
+                  {END_TIME_OPTIONS.map((time) => {
+                    const selected = endTime === time;
+                    return (
+                      <Pressable
+                        key={time || "no-end"}
+                        onPress={() => {
+                          setEndTime(time);
+                          setOpenTimePicker(null);
+                        }}
+                        style={[
+                          styles.createTimeDropdownOption,
+                          selected && styles.createTimeDropdownOptionSelected,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.createTimeDropdownOptionText,
+                            selected && styles.createTimeDropdownOptionTextSelected,
+                          ]}
+                        >
+                          {time ? formatTimeOption(time) : "No end"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.createDateTimeActionsRow}>
+              <Pressable
+                onPress={() => {
+                  setOpenTimePicker(null);
+                  setIsDateTimePickerOpen(false);
+                }}
+                style={styles.createDateTimeDoneButton}
+              >
+                <Text style={styles.createDateTimeDoneText}>Done</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }

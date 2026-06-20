@@ -176,8 +176,6 @@ type AnimatedUserMarkerProps = {
   userId: string;
   zIndex: number;
   coordinate: AnimatedRegion;
-  title: string;
-  description: string;
   fresh: boolean;
   markerUri: string | null;
   markerInitials: string;
@@ -270,8 +268,6 @@ const ClusterMarker = React.memo(function ClusterMarker({
 const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
   userId,
   coordinate,
-  title,
-  description,
   fresh,
   markerUri,
   markerInitials,
@@ -286,8 +282,6 @@ const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
       ref={(marker: any) => onRef(userId, marker)}
       coordinate={coordinate}
       anchor={{ x: 0.5, y: 1 }}
-      title={title}
-      description={description}
       zIndex={zIndex}
       onPress={() => onPress(userId)}
       tracksViewChanges={tracksViewChanges}
@@ -330,11 +324,9 @@ const UserMarkerLayer = React.memo(function UserMarkerLayer({
         const { loc, adjLat, adjLng } = item;
         const p = profilesById[loc.user_id];
 
-        const markerName = getProfileMarkerName(p, loc.user_id);
         const markerAvatar = getProfileMarkerAvatar(p, loc.user_id);
 
         const fresh = isFresh(loc.updated_at, 2 * 60 * 1000);
-        const lastSeen = formatLastSeen(loc.updated_at);
         const markerUri = markerAvatar.uri;
         const markerInitials = markerAvatar.initials;
         const markerBorderColor = markerAvatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR;
@@ -351,8 +343,6 @@ const UserMarkerLayer = React.memo(function UserMarkerLayer({
             userId={loc.user_id}
             zIndex={loc.user_id === effectiveMyUserId ? MY_USER_MARKER_Z_INDEX : OTHER_USER_MARKER_Z_INDEX}
             coordinate={animatedCoordinate}
-            title={markerName}
-            description={fresh ? "Live" : `Last seen ${lastSeen}`}
             fresh={fresh}
             markerUri={markerUri}
             markerInitials={markerInitials}
@@ -370,11 +360,15 @@ const MeetMarkerLayer = React.memo(function MeetMarkerLayer({
   showMeetPins,
   meetMarkers,
   selectedMeetId,
+  meetMarkerRedrawVersion,
+  meetMarkersTrackViewChanges,
   onMeetMarkerPress,
 }: {
   showMeetPins: boolean;
   meetMarkers: MeetMarkerItem[];
   selectedMeetId: string | null;
+  meetMarkerRedrawVersion: number;
+  meetMarkersTrackViewChanges: boolean;
   onMeetMarkerPress: (meetId: string) => void;
 }) {
   if (!showMeetPins) return null;
@@ -386,9 +380,11 @@ const MeetMarkerLayer = React.memo(function MeetMarkerLayer({
 
         return (
           <Marker
-            key={`meet-${meet.id}`}
+            key={`meet-${meetMarkerRedrawVersion}-${meet.id}`}
+            identifier={`meet-${meet.id}`}
             coordinate={{ latitude: meet.latitude, longitude: meet.longitude }}
             zIndex={MEET_MARKER_Z_INDEX}
+            tracksViewChanges={meetMarkersTrackViewChanges}
             onPress={(event) => {
               event.stopPropagation?.();
               onMeetMarkerPress(meet.id);
@@ -482,7 +478,6 @@ export default function MapScreen() {
   const isProgrammaticCameraMoveRef = useRef(false);
   const selectedMeetIdRef = useRef<string | null>(null);
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
-  const profileCardMaxHeight = Math.min(screenHeight * 0.78, 640);
   const collapsedSheetHeight = Math.round(screenHeight * 0.33);
   const expandedSheetHeight = Math.round(screenHeight * 0.76);
   const sheetHeightAnim = useRef(new Animated.Value(collapsedSheetHeight)).current;
@@ -538,6 +533,7 @@ export default function MapScreen() {
   const previousMeetMarkerRedrawStateRef = useRef({
     selectedMeetId,
     showMeetPins,
+    meetIdsKey: "",
   });
 
   useEffect(() => {
@@ -546,15 +542,18 @@ export default function MapScreen() {
 
   useEffect(() => {
     const previous = previousMeetMarkerRedrawStateRef.current;
+    const meetIdsKey = meets.map((meet) => meet.id).join("|");
     const meetMarkerStateChanged =
       previous.selectedMeetId !== selectedMeetId ||
-      previous.showMeetPins !== showMeetPins;
+      previous.showMeetPins !== showMeetPins ||
+      previous.meetIdsKey !== meetIdsKey;
 
     if (!meetMarkerStateChanged) return;
 
     previousMeetMarkerRedrawStateRef.current = {
       selectedMeetId,
       showMeetPins,
+      meetIdsKey,
     };
     setClusterMarkerRedrawVersion((version) => version + 1);
     setClusterMarkersTrackViewChanges(true);
@@ -564,7 +563,7 @@ export default function MapScreen() {
     }, 350);
 
     return () => clearTimeout(timeout);
-  }, [selectedMeetId, showMeetPins]);
+  }, [meets, selectedMeetId, showMeetPins]);
   const [focusedClusterKey, setFocusedClusterKey] = useState<string | null>(null);
   const animatedUserCoordsRef = useRef<Record<string, AnimatedRegion>>({});
   const markerRefs = useRef<Record<string, any>>({});
@@ -1824,20 +1823,51 @@ export default function MapScreen() {
     .filter(Boolean)
     .join(", ");
   const hasCars = selectedUserCars.length > 0;
+  const primaryProfileCar = selectedUserCars.find((car) => car.is_primary) ?? selectedUserCars[0] ?? null;
+  const publicProfileHeroUri = primaryProfileCar?.photo_url ?? selectedProfile?.photo_url ?? null;
   const socialEntries = [
     selectedProfile?.instagram_handle
-      ? { key: "instagram", label: "Instagram", url: `https://instagram.com/${selectedProfile.instagram_handle.replace(/^@/, "")}` }
+      ? {
+          key: "instagram",
+          label: "Instagram",
+          icon: "instagram",
+          url: `https://instagram.com/${selectedProfile.instagram_handle.replace(/^@/, "")}`,
+        }
       : null,
     selectedProfile?.tiktok_handle
-      ? { key: "tiktok", label: "TikTok", url: `https://www.tiktok.com/@${selectedProfile.tiktok_handle.replace(/^@/, "")}` }
+      ? {
+          key: "tiktok",
+          label: "TikTok",
+          icon: "music-note",
+          url: `https://www.tiktok.com/@${selectedProfile.tiktok_handle.replace(/^@/, "")}`,
+        }
       : null,
     selectedProfile?.twitter_handle
-      ? { key: "twitter", label: "X", url: `https://x.com/${selectedProfile.twitter_handle.replace(/^@/, "")}` }
+      ? {
+          key: "twitter",
+          label: "X",
+          icon: "alpha-x",
+          url: `https://x.com/${selectedProfile.twitter_handle.replace(/^@/, "")}`,
+        }
       : null,
     selectedProfile?.snapchat_handle
-      ? { key: "snapchat", label: "Snapchat", url: `https://www.snapchat.com/add/${selectedProfile.snapchat_handle.replace(/^@/, "")}` }
+      ? {
+          key: "snapchat",
+          label: "Snapchat",
+          icon: "snapchat",
+          url: `https://www.snapchat.com/add/${selectedProfile.snapchat_handle.replace(/^@/, "")}`,
+        }
       : null,
-  ].filter((entry): entry is { key: string; label: string; url: string } => Boolean(entry));
+  ].filter(
+    (
+      entry
+    ): entry is {
+      key: string;
+      label: string;
+      icon: keyof typeof MaterialCommunityIcons.glyphMap;
+      url: string;
+    } => Boolean(entry)
+  );
 
   return (
     <View style={{ flex: 1 }}>
@@ -1862,6 +1892,8 @@ export default function MapScreen() {
           showMeetPins={showMeetPins}
           meetMarkers={meetMarkers}
           selectedMeetId={selectedMeetId}
+          meetMarkerRedrawVersion={clusterMarkerRedrawVersion}
+          meetMarkersTrackViewChanges={clusterMarkersTrackViewChanges}
           onMeetMarkerPress={handleMeetMarkerPress}
         />
 
@@ -2022,110 +2054,196 @@ export default function MapScreen() {
       </Animated.View>
 
       {selectedUserId && !selectedMeetId && (
-        <View style={styles.cardContainer}>
+        <View style={styles.publicProfileOverlay}>
           <View
             style={[
-              styles.card,
-              styles.publicProfileCard,
-              { maxHeight: profileCardMaxHeight },
+              styles.publicProfileFullCard,
               selectedProfile?.is_active_premium && selectedProfile?.accent_color
                 ? { borderColor: selectedProfile.accent_color }
                 : null,
             ]}
           >
-            <View style={styles.cardHeader}>
-              {selectedProfile?.photo_url ? (
-                <Image
-                  source={{ uri: selectedProfile.photo_url }}
-                  style={styles.avatar}
-                />
-              ) : (
-                <View style={[styles.avatar, styles.avatarFallback]}>
-                  <Text style={styles.avatarInitials}>{initials}</Text>
-                </View>
-              )}
-
-              <View style={{ flex: 1, marginLeft: 10 }}>
-                <View style={styles.profileNameRow}>
-                  <Text style={styles.cardName}>{displayName}</Text>
-                  {selectedProfile?.is_active_premium ? (
-                    <View style={styles.premiumBadge}>
-                      <Text style={styles.premiumBadgeText}>PREMIUM</Text>
-                    </View>
-                  ) : null}
-                </View>
-                {selectedProfile?.username && (
-                  <Text style={styles.cardSub}>@{selectedProfile.username}</Text>
-                )}
-                {locationLabel ? <Text style={styles.cardSubSmall}>{locationLabel}</Text> : null}
-
-                {locationsById[selectedUserId]?.updated_at && (
-                  <Text style={styles.cardSubSmall}>
-                    Last seen: {formatLastSeen(locationsById[selectedUserId]?.updated_at)}
-                  </Text>
-                )}
-              </View>
-
-              <Pressable onPress={closeProfileCard} style={styles.closeBtn}>
-                <Text style={styles.closeBtnText}>✕</Text>
-              </Pressable>
-            </View>
-
-            {profileLoading && (
-              <View style={{ marginTop: 8 }}>
-                <ActivityIndicator />
-              </View>
-            )}
-
-            {profileError && <Text style={styles.errorText}>{profileError}</Text>}
             <ScrollView
-              style={styles.publicProfileScroll}
-              contentContainerStyle={styles.publicProfileScrollContent}
+              style={styles.publicProfileFullScroll}
+              contentContainerStyle={styles.publicProfileFullContent}
               showsVerticalScrollIndicator={false}
             >
-              {selectedProfile?.bio ? (
-                <Text style={styles.profileBio}>{selectedProfile.bio}</Text>
-              ) : (
-                <Text style={styles.cardSubSmall}>No bio added.</Text>
-              )}
+              <View style={styles.publicProfileHero}>
+                {publicProfileHeroUri ? (
+                  <Image source={{ uri: publicProfileHeroUri }} style={styles.publicProfileHeroImage} />
+                ) : null}
+                <View style={styles.publicProfileHeroScrim} />
+                <Pressable onPress={closeProfileCard} style={styles.publicProfileCloseButton}>
+                  <MaterialCommunityIcons name="close" size={22} color="#fff" />
+                </Pressable>
+              </View>
 
-              {socialEntries.length > 0 && (
-                <View style={styles.socialRow}>
-                  {socialEntries.map((social) => (
-                    <Pressable
-                      key={social.key}
-                      onPress={() => ExpoLinking.openURL(social.url)}
-                      style={({ pressed }) => [styles.socialPill, pressed && { opacity: 0.85 }]}
-                    >
-                      <Text style={styles.socialPillText}>{social.label}</Text>
-                    </Pressable>
-                  ))}
+              <View style={styles.publicProfileHeaderBlock}>
+                {selectedProfile?.photo_url ? (
+                  <Image
+                    source={{ uri: selectedProfile.photo_url }}
+                    style={[
+                      styles.publicProfileAvatar,
+                      selectedProfile?.is_active_premium && selectedProfile?.accent_color
+                        ? { borderColor: selectedProfile.accent_color }
+                        : null,
+                    ]}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.publicProfileAvatar,
+                      styles.publicProfileAvatarFallback,
+                      selectedProfile?.is_active_premium && selectedProfile?.accent_color
+                        ? { borderColor: selectedProfile.accent_color }
+                        : null,
+                    ]}
+                  >
+                    <Text style={styles.publicProfileAvatarInitials}>{initials}</Text>
+                  </View>
+                )}
+
+                <View style={styles.publicProfileIdentityRow}>
+                  <View style={styles.publicProfileNameWrap}>
+                    <View style={styles.profileNameRow}>
+                      <Text style={styles.publicProfileName}>{displayName}</Text>
+                      {selectedProfile?.is_active_premium ? (
+                        <View style={styles.premiumBadge}>
+                          <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {selectedProfile?.username ? (
+                      <Text style={styles.publicProfileUsername}>@{selectedProfile.username}</Text>
+                    ) : null}
+                    {locationLabel ? <Text style={styles.publicProfileMeta}>{locationLabel}</Text> : null}
+                    {locationsById[selectedUserId]?.updated_at ? (
+                      <Text style={styles.publicProfileMeta}>
+                        Last seen {formatLastSeen(locationsById[selectedUserId]?.updated_at)}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
-              )}
 
-              <View style={styles.carsSection}>
-                <Text style={styles.carsTitle}>Cars</Text>
+                {socialEntries.length > 0 ? (
+                  <View style={styles.publicProfileSocialRow}>
+                    {socialEntries.map((social) => (
+                      <Pressable
+                        key={social.key}
+                        onPress={() => ExpoLinking.openURL(social.url)}
+                        style={({ pressed }) => [
+                          styles.publicProfileSocialButton,
+                          pressed && { opacity: 0.82 },
+                        ]}
+                        accessibilityLabel={social.label}
+                      >
+                        <MaterialCommunityIcons name={social.icon} size={19} color="#fff" />
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+
+                {selectedProfile?.bio ? (
+                  <Text style={styles.publicProfileBio}>{selectedProfile.bio}</Text>
+                ) : (
+                  <Text style={styles.publicProfileMutedText}>No bio added.</Text>
+                )}
+
+                {profileLoading ? (
+                  <View style={styles.publicProfileLoadingRow}>
+                    <ActivityIndicator color="#fff" />
+                  </View>
+                ) : null}
+                {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
+
+                {selectedUserId !== myUserId ? (
+                  <View style={styles.publicProfileActionRow}>
+                    {friendRelationshipState !== "friends" ? (
+                      <Pressable
+                        onPress={friendRelationshipState === "none" ? sendFriendRequest : undefined}
+                        disabled={
+                          sendingRequest ||
+                          !!profileError ||
+                          profileLoading ||
+                          friendRelationshipState !== "none"
+                        }
+                        style={({ pressed }) => [
+                          styles.publicProfileFriendButton,
+                          friendRelationshipState !== "none" && styles.friendBtnDisabled,
+                          (pressed || sendingRequest) && { opacity: 0.8 },
+                        ]}
+                      >
+                        {sendingRequest ? (
+                          <ActivityIndicator color="#fff" />
+                        ) : (
+                          <>
+                            <MaterialCommunityIcons
+                              name={
+                                friendRelationshipState === "request_sent"
+                                  ? "clock-check-outline"
+                                  : friendRelationshipState === "request_received"
+                                    ? "account-clock-outline"
+                                    : "account-plus"
+                              }
+                              size={18}
+                              color="#fff"
+                            />
+                            <Text style={styles.friendBtnText}>
+                              {friendRelationshipState === "request_sent"
+                                ? "Request Sent"
+                                : friendRelationshipState === "request_received"
+                                  ? "Respond"
+                                  : "Send Friend Request"}
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
+                    ) : (
+                      <View style={styles.publicProfileFriendBadge}>
+                        <MaterialCommunityIcons name="account-check" size={18} color="#fff" />
+                        <Text style={styles.friendBadgeText}>Friends</Text>
+                      </View>
+                    )}
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={styles.publicProfileTabsRow}>
+                <View style={styles.publicProfileTabActive}>
+                  <MaterialCommunityIcons name="car-sports" size={19} color="#ef4444" />
+                  <Text style={styles.publicProfileTabActiveText}>Cars</Text>
+                </View>
+                <View style={styles.publicProfileTab}>
+                  <MaterialCommunityIcons name="calendar-blank-outline" size={19} color="#bcbcbc" />
+                  <Text style={styles.publicProfileTabText}>Meets</Text>
+                </View>
+              </View>
+
+              <View style={styles.publicProfileCarsList}>
                 {!hasCars ? (
-                  <Text style={styles.cardSubSmall}>No cars listed.</Text>
+                  <Text style={styles.publicProfileMutedText}>No cars listed.</Text>
                 ) : (
                   selectedUserCars.map((car) => {
                     const title = [car.year, car.make, car.model].filter(Boolean).join(" ");
-                    const subtitle = [car.color, car.trim].filter(Boolean).join(" • ");
+                    const subtitle = [car.color, car.trim].filter(Boolean).join(" � ");
                     return (
-                      <View key={car.id} style={styles.carRow}>
+                      <View key={car.id} style={styles.publicProfileCarCard}>
                         {car.photo_url ? (
-                          <Image source={{ uri: car.photo_url }} style={styles.carPhoto} />
+                          <Image source={{ uri: car.photo_url }} style={styles.publicProfileCarImage} />
                         ) : (
-                          <View style={[styles.carPhoto, styles.carPhotoFallback]}>
+                          <View style={[styles.publicProfileCarImage, styles.carPhotoFallback]}>
                             <Text style={styles.carPhotoFallbackText}>No Photo</Text>
                           </View>
                         )}
-                        <View style={{ flex: 1 }}>
+                        <View style={styles.publicProfileCarBody}>
                           <View style={styles.carNameRow}>
-                            <Text style={styles.carName}>{title || "Unknown car"}</Text>
+                            <Text style={styles.publicProfileCarTitle}>{title || "Unknown car"}</Text>
                             {car.is_primary ? <Text style={styles.primaryTag}>Primary</Text> : null}
                           </View>
-                          {subtitle ? <Text style={styles.cardSubSmall}>{subtitle}</Text> : null}
+                          {subtitle ? <Text style={styles.publicProfileCarMeta}>{subtitle}</Text> : null}
+                          {car.description ? (
+                            <Text style={styles.publicProfileCarDescription}>{car.description}</Text>
+                          ) : null}
                         </View>
                       </View>
                     );
@@ -2133,41 +2251,6 @@ export default function MapScreen() {
                 )}
               </View>
             </ScrollView>
-
-            <View style={styles.cardActions}>
-              {friendRelationshipState !== "friends" ? (
-                <Pressable
-                  onPress={friendRelationshipState === "none" ? sendFriendRequest : undefined}
-                  disabled={
-                    sendingRequest ||
-                    !!profileError ||
-                    profileLoading ||
-                    friendRelationshipState !== "none"
-                  }
-                  style={({ pressed }) => [
-                    styles.friendBtn,
-                    friendRelationshipState !== "none" && styles.friendBtnDisabled,
-                    (pressed || sendingRequest) && { opacity: 0.8 },
-                  ]}
-                >
-                  {sendingRequest ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.friendBtnText}>
-                      {friendRelationshipState === "request_sent"
-                        ? "Request Sent"
-                        : friendRelationshipState === "request_received"
-                          ? "Respond"
-                          : "Send Friend Request"}
-                    </Text>
-                  )}
-                </Pressable>
-              ) : (
-                <View style={styles.friendBadge}>
-                  <Text style={styles.friendBadgeText}>Friends</Text>
-                </View>
-              )}
-            </View>
           </View>
         </View>
       )}
