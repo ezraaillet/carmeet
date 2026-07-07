@@ -1,21 +1,19 @@
 {
   "expo": {
-    "name": "carmeet",
-    "slug": "carmeet",
+    "name": "Cruizr",
+    "slug": "Cruizr",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "carmeet",
+    "icon": "./assets/images/cruizr.png",
+    "scheme": "cruizr",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ezraaillet.carmeet",
+      "bundleIdentifier": "com.ezraaillet.cruizr",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": [
-          "location"
-        ]
+        "UIBackgroundModes": ["location"]
       }
     },
     "android": {
@@ -33,7 +31,7 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ],
-      "package": "com.ezraaillet.carmeet"
+      "package": "com.ezraaillet.cruizr"
     },
     "web": {
       "output": "static",
@@ -56,8 +54,8 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "CarMeet needs your location to show you on the map even when the app is closed.",
-          "locationWhenInUsePermission": "CarMeet needs your location to show you on the map."
+          "locationAlwaysAndWhenInUsePermission": "Cruizr needs your location to show you on the map even when the app is closed.",
+          "locationWhenInUsePermission": "Cruizr needs your location to show you on the map."
         }
       ],
       "expo-web-browser"

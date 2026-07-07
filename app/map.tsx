@@ -17,7 +17,12 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Car, FriendRelationshipState, LiveLoc, Profile } from "@/features/map/mapTypes";
+import {
+  Car,
+  FriendRelationshipState,
+  LiveLoc,
+  Profile,
+} from "@/features/map/mapTypes";
 import MapView, {
   AnimatedRegion,
   Marker,
@@ -25,7 +30,17 @@ import MapView, {
   PROVIDER_GOOGLE,
   Region,
 } from "react-native-maps";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  PUBLIC_DISCOVERY_RADIUS_METERS,
+  useMapData,
+} from "@/components/MapDataProvider";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   distanceBetweenCoordsMeters,
   distanceInMeters,
@@ -33,7 +48,10 @@ import {
   formatMeetStatus,
   isFresh,
 } from "@/features/map/mapHelpers";
-import { ensureMinimalProfileExists, hasMapProfileData } from "@/utils/profileReadiness";
+import {
+  ensureMinimalProfileExists,
+  hasMapProfileData,
+} from "@/utils/profileReadiness";
 import {
   fetchUserMarkerCardData,
   getCurrentAuthUser,
@@ -47,7 +65,6 @@ import { colors } from "@/styles/themes";
 import styles from "@/styles/mapstyles";
 import { supabase } from "../database/supabase";
 import { useFocusEffect } from "@react-navigation/native";
-import { PUBLIC_DISCOVERY_RADIUS_METERS, useMapData } from "@/components/MapDataProvider";
 
 const MARKER_JITTER_THRESHOLD_METERS = 2;
 const MARKER_SNAP_THRESHOLD_METERS = 350;
@@ -62,8 +79,8 @@ const OTHER_USER_MARKER_Z_INDEX = 100;
 const MY_USER_MARKER_Z_INDEX = 900;
 const MEET_MARKER_Z_INDEX = 1000;
 const CLUSTER_MARKER_Z_INDEX = 1200;
-const FOCUS_ME_LATITUDE_DELTA = 0.0022;
-
+const INITIAL_LOCATION_LATITUDE_DELTA = 0.0725;
+const FOLLOW_LOCATION_LATITUDE_DELTA = 0.0145;
 
 type UserMarkerItem = {
   type: "user";
@@ -114,7 +131,10 @@ function getProfileMarkerBorderColor(profile: Profile | undefined) {
     : DEFAULT_MARKER_BORDER_COLOR;
 }
 
-function getProfileMarkerAvatar(profile: Profile | undefined, userId: string): MarkerAvatarData {
+function getProfileMarkerAvatar(
+  profile: Profile | undefined,
+  userId: string,
+): MarkerAvatarData {
   const markerName = getProfileMarkerName(profile, userId);
 
   return {
@@ -128,8 +148,12 @@ function getProfileMarkerAvatar(profile: Profile | undefined, userId: string): M
 function isPubliclyDiscoverableProfile(profile: Profile | undefined) {
   if (!profile) return false;
 
-  const locationVisibility = (profile.location_visibility ?? "everyone").toLowerCase();
-  const profileVisibility = (profile.profile_visibility ?? "public").toLowerCase();
+  const locationVisibility = (
+    profile.location_visibility ?? "everyone"
+  ).toLowerCase();
+  const profileVisibility = (
+    profile.profile_visibility ?? "public"
+  ).toLowerCase();
 
   return (
     locationVisibility === "everyone" &&
@@ -137,12 +161,11 @@ function isPubliclyDiscoverableProfile(profile: Profile | undefined) {
   );
 }
 
-
 function getMeetRowStatusLabel(
   status?: string | null,
   startTime?: string | null,
   endTime?: string | null,
-  nowMs = Date.now()
+  nowMs = Date.now(),
 ) {
   const normalizedStatus = (status ?? "").toLowerCase();
 
@@ -230,7 +253,9 @@ const ClusterMarker = React.memo(function ClusterMarker({
       <View
         style={[
           styles.clusterAvatarFan,
-          offsetAboveCurrentUser ? styles.clusterAvatarFanOffsetAboveUser : null,
+          offsetAboveCurrentUser
+            ? styles.clusterAvatarFanOffsetAboveUser
+            : null,
         ]}
       >
         {avatars.slice(0, 3).map((avatar, index) => (
@@ -243,14 +268,21 @@ const ClusterMarker = React.memo(function ClusterMarker({
                 : index === 1
                   ? styles.clusterAvatarCenter
                   : styles.clusterAvatarRight,
-              { borderColor: avatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR },
+              {
+                borderColor: avatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR,
+              },
             ]}
           >
             {avatar.uri ? (
-              <Image source={{ uri: avatar.uri }} style={styles.clusterAvatarImage} />
+              <Image
+                source={{ uri: avatar.uri }}
+                style={styles.clusterAvatarImage}
+              />
             ) : (
               <View style={styles.clusterAvatarFallback}>
-                <Text style={styles.clusterAvatarInitials}>{avatar.initials}</Text>
+                <Text style={styles.clusterAvatarInitials}>
+                  {avatar.initials}
+                </Text>
               </View>
             )}
           </View>
@@ -313,7 +345,7 @@ const UserMarkerLayer = React.memo(function UserMarkerLayer({
   getOrCreateAnimatedUserCoordinate: (
     userId: string,
     latitude: number,
-    longitude: number
+    longitude: number,
   ) => AnimatedRegion;
   onUserMarkerPress: (userId: string) => void;
   onUserMarkerRef: (userId: string, marker: any) => void;
@@ -329,19 +361,24 @@ const UserMarkerLayer = React.memo(function UserMarkerLayer({
         const fresh = isFresh(loc.updated_at, 2 * 60 * 1000);
         const markerUri = markerAvatar.uri;
         const markerInitials = markerAvatar.initials;
-        const markerBorderColor = markerAvatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR;
+        const markerBorderColor =
+          markerAvatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR;
 
         const animatedCoordinate = getOrCreateAnimatedUserCoordinate(
           loc.user_id,
           adjLat,
-          adjLng
+          adjLng,
         );
 
         return (
           <AnimatedUserMarker
             key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
             userId={loc.user_id}
-            zIndex={loc.user_id === effectiveMyUserId ? MY_USER_MARKER_Z_INDEX : OTHER_USER_MARKER_Z_INDEX}
+            zIndex={
+              loc.user_id === effectiveMyUserId
+                ? MY_USER_MARKER_Z_INDEX
+                : OTHER_USER_MARKER_Z_INDEX
+            }
             coordinate={animatedCoordinate}
             fresh={fresh}
             markerUri={markerUri}
@@ -391,7 +428,12 @@ const MeetMarkerLayer = React.memo(function MeetMarkerLayer({
             }}
             stopPropagation
           >
-            <View style={[styles.meetMarkerWrap, isSelected ? styles.meetMarkerWrapSelected : null]}>
+            <View
+              style={[
+                styles.meetMarkerWrap,
+                isSelected ? styles.meetMarkerWrapSelected : null,
+              ]}
+            >
               <Text style={styles.meetMarkerIcon}>📍</Text>
             </View>
           </Marker>
@@ -424,13 +466,16 @@ const ClusterMarkerLayer = React.memo(function ClusterMarkerLayer({
         const offsetAboveCurrentUser = currentUserLocation
           ? distanceBetweenCoordsMeters(
               { latitude: item.lat, longitude: item.lng },
-              { latitude: currentUserLocation.lat, longitude: currentUserLocation.lng }
+              {
+                latitude: currentUserLocation.lat,
+                longitude: currentUserLocation.lng,
+              },
             ) <= CLUSTER_CURRENT_USER_OVERLAP_THRESHOLD_METERS
           : false;
         const clusterAvatars = item.members
           .slice(0, 3)
           .map((member) =>
-            getProfileMarkerAvatar(profilesById[member.userId], member.userId)
+            getProfileMarkerAvatar(profilesById[member.userId], member.userId),
           );
 
         const clusterMarkerKey = `cluster-mode-${clusterModeVersion}-${clusterMarkerRedrawVersion}-${item.key}`;
@@ -465,22 +510,31 @@ const ClusterMarkerLayer = React.memo(function ClusterMarkerLayer({
 
 export default function MapScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ focusMeetId?: string; latitude?: string; longitude?: string }>();
+  const params = useLocalSearchParams<{
+    focusMeetId?: string;
+    latitude?: string;
+    longitude?: string;
+  }>();
   const hasRequestedMeetTarget = useMemo(() => {
-    const hasMeetId = typeof params.focusMeetId === "string" && params.focusMeetId.length > 0;
+    const hasMeetId =
+      typeof params.focusMeetId === "string" && params.focusMeetId.length > 0;
     const latitude = Number(params.latitude);
     const longitude = Number(params.longitude);
-    const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+    const hasCoordinates =
+      Number.isFinite(latitude) && Number.isFinite(longitude);
     return hasMeetId || hasCoordinates;
   }, [params.focusMeetId, params.latitude, params.longitude]);
   const mapRef = useRef<MapView | null>(null);
   const hasUserMovedMapRef = useRef(false);
   const isProgrammaticCameraMoveRef = useRef(false);
   const selectedMeetIdRef = useRef<string | null>(null);
+  const selectedUserIdRef = useRef<string | null>(null);
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const collapsedSheetHeight = Math.round(screenHeight * 0.33);
   const expandedSheetHeight = Math.round(screenHeight * 0.76);
-  const sheetHeightAnim = useRef(new Animated.Value(collapsedSheetHeight)).current;
+  const sheetHeightAnim = useRef(
+    new Animated.Value(collapsedSheetHeight),
+  ).current;
   const sheetDragStartHeightRef = useRef(collapsedSheetHeight);
   const sheetVisibleHeightRef = useRef(collapsedSheetHeight);
 
@@ -524,10 +578,13 @@ export default function MapScreen() {
     useState<FriendRelationshipState>("none");
 
   const [selectedMeetId, setSelectedMeetId] = useState<string | null>(null);
-  const [meetAttendanceSavingStatus, setMeetAttendanceSavingStatus] = useState<string | null>(null);
+  const [meetAttendanceSavingStatus, setMeetAttendanceSavingStatus] = useState<
+    string | null
+  >(null);
   const [meetSearchQuery, setMeetSearchQuery] = useState("");
   const [showMeetPins, setShowMeetPins] = useState(true);
-  const [clusterMarkerRedrawVersion, setClusterMarkerRedrawVersion] = useState(0);
+  const [clusterMarkerRedrawVersion, setClusterMarkerRedrawVersion] =
+    useState(0);
   const [clusterMarkersTrackViewChanges, setClusterMarkersTrackViewChanges] =
     useState(false);
   const previousMeetMarkerRedrawStateRef = useRef({
@@ -539,6 +596,10 @@ export default function MapScreen() {
   useEffect(() => {
     selectedMeetIdRef.current = selectedMeetId;
   }, [selectedMeetId]);
+
+  useEffect(() => {
+    selectedUserIdRef.current = selectedUserId;
+  }, [selectedUserId]);
 
   useEffect(() => {
     const previous = previousMeetMarkerRedrawStateRef.current;
@@ -564,7 +625,9 @@ export default function MapScreen() {
 
     return () => clearTimeout(timeout);
   }, [meets, selectedMeetId, showMeetPins]);
-  const [focusedClusterKey, setFocusedClusterKey] = useState<string | null>(null);
+  const [focusedClusterKey, setFocusedClusterKey] = useState<string | null>(
+    null,
+  );
   const animatedUserCoordsRef = useRef<Record<string, AnimatedRegion>>({});
   const markerRefs = useRef<Record<string, any>>({});
   const lastAnimatedTargetsRef = useRef<
@@ -652,7 +715,45 @@ export default function MapScreen() {
 
       if (error) console.warn("Supabase upsert error:", error.message);
     },
-    []
+    [],
+  );
+
+  const followMyLocationOnMap = useCallback(
+    (
+      target: { latitude: number; longitude: number },
+      options: {
+        duration?: number;
+        latitudeDelta?: number;
+        respectSheetOffset?: boolean;
+      } = {},
+    ) => {
+      if (!mapRef.current) return;
+
+      const latitudeDelta =
+        options.latitudeDelta ?? FOLLOW_LOCATION_LATITUDE_DELTA;
+      const respectSheetOffset = options.respectSheetOffset ?? true;
+      const sheetHeight = respectSheetOffset
+        ? Math.min(screenHeight, Math.max(0, sheetVisibleHeightRef.current))
+        : 0;
+      const visibleMapHeight = Math.max(1, screenHeight - sheetHeight);
+      const latitudeOffset = respectSheetOffset
+        ? (latitudeDelta * (screenHeight - visibleMapHeight)) /
+          (2 * screenHeight)
+        : 0;
+      const longitudeDelta = latitudeDelta * (screenWidth / visibleMapHeight);
+
+      isProgrammaticCameraMoveRef.current = true;
+      mapRef.current.animateToRegion(
+        {
+          latitude: target.latitude - latitudeOffset,
+          longitude: target.longitude,
+          latitudeDelta,
+          longitudeDelta,
+        },
+        options.duration ?? 650,
+      );
+    },
+    [screenHeight, screenWidth],
   );
 
   useFocusEffect(
@@ -664,7 +765,7 @@ export default function MapScreen() {
 
       const applyLocationToMap = async (
         position: Location.LocationObject,
-        options: { animateIfAllowed: boolean }
+        options: { animateIfAllowed: boolean },
       ) => {
         if (cancelled) return;
 
@@ -694,15 +795,18 @@ export default function MapScreen() {
           !hasUserMovedMapRef.current &&
           !selectedMeetIdRef.current;
 
-        if (canAnimateToMe && mapRef.current) {
-          isProgrammaticCameraMoveRef.current = true;
-          mapRef.current.animateCamera({
-            center: {
+        if (canAnimateToMe) {
+          followMyLocationOnMap(
+            {
               latitude: position.coords.latitude,
               longitude: position.coords.longitude,
             },
-            zoom: 15,
-          });
+            {
+              duration: 700,
+              latitudeDelta: INITIAL_LOCATION_LATITUDE_DELTA,
+              respectSheetOffset: false,
+            },
+          );
         }
 
         setGotFix(true);
@@ -731,7 +835,7 @@ export default function MapScreen() {
             current.coords.latitude,
             current.coords.longitude,
             current.coords.heading ?? undefined,
-            current.coords.speed ?? undefined
+            current.coords.speed ?? undefined,
           );
         } catch (e: any) {
           console.warn("Current location error:", e?.message ?? e);
@@ -758,13 +862,30 @@ export default function MapScreen() {
                 });
               }
 
+              const shouldFollowMyLocation =
+                !hasRequestedMeetTarget &&
+                !hasUserMovedMapRef.current &&
+                !selectedMeetIdRef.current &&
+                !selectedUserIdRef.current;
+
+              if (shouldFollowMyLocation) {
+                followMyLocationOnMap(
+                  { latitude: coords.latitude, longitude: coords.longitude },
+                  {
+                    duration: 650,
+                    latitudeDelta: FOLLOW_LOCATION_LATITUDE_DELTA,
+                    respectSheetOffset: true,
+                  },
+                );
+              }
+
               await upsertMyLocation(
                 coords.latitude,
                 coords.longitude,
                 coords.heading ?? undefined,
-                coords.speed ?? undefined
+                coords.speed ?? undefined,
               );
-            }
+            },
           );
         } catch (e: any) {
           console.warn("Location watch error:", e?.message ?? e);
@@ -782,19 +903,26 @@ export default function MapScreen() {
       setMyLiveLocation,
       myUserId,
       hasRequestedMeetTarget,
-    ])
+      followMyLocationOnMap,
+    ]),
   );
 
-  const locationsByIdKeys = useMemo(() => Object.keys(locationsById), [locationsById]);
-  const profilesByIdKeys = useMemo(() => Object.keys(profilesById), [profilesById]);
+  const locationsByIdKeys = useMemo(
+    () => Object.keys(locationsById),
+    [locationsById],
+  );
+  const profilesByIdKeys = useMemo(
+    () => Object.keys(profilesById),
+    [profilesById],
+  );
   const effectiveMyUserId = myUserId ?? mapDataUserId;
 
   const sourceLocations = useMemo(
     () =>
       Object.values(locationsById).filter(
-        (loc) => Number.isFinite(loc.lat) && Number.isFinite(loc.lng)
+        (loc) => Number.isFinite(loc.lat) && Number.isFinite(loc.lng),
       ),
-    [locationsById]
+    [locationsById],
   );
 
   const shouldShowClusters =
@@ -808,7 +936,7 @@ export default function MapScreen() {
         userId: loc.user_id,
         distanceFromCenter: distanceBetweenCoordsMeters(
           { latitude: region.latitude, longitude: region.longitude },
-          { latitude: loc.lat, longitude: loc.lng }
+          { latitude: loc.lat, longitude: loc.lng },
         ),
       }))
       .sort((a, b) => b.distanceFromCenter - a.distanceFromCenter)
@@ -819,15 +947,14 @@ export default function MapScreen() {
   const markerDataSignature = useMemo(() => {
     const locationSignature = Object.values(locationsById)
       .map(
-        (loc) =>
-          `${loc.user_id}:${loc.lat}:${loc.lng}:${loc.updated_at ?? ""}`
+        (loc) => `${loc.user_id}:${loc.lat}:${loc.lng}:${loc.updated_at ?? ""}`,
       )
       .sort()
       .join("|");
     const profileSignature = Object.values(profilesById)
       .map(
         (profile) =>
-          `${profile.id}:${profile.photo_url ?? ""}:${profile.display_name ?? ""}:${profile.username ?? ""}:${profile.is_active_premium ? "1" : "0"}:${profile.accent_color ?? ""}`
+          `${profile.id}:${profile.photo_url ?? ""}:${profile.display_name ?? ""}:${profile.username ?? ""}:${profile.is_active_premium ? "1" : "0"}:${profile.accent_color ?? ""}`,
       )
       .sort()
       .join("|");
@@ -843,7 +970,7 @@ export default function MapScreen() {
 
     const nearbyThresholdMeters = Math.max(
       20,
-      Math.min(120, 40 * (region.latitudeDelta / 0.05))
+      Math.min(120, 40 * (region.latitudeDelta / 0.05)),
     );
     // Always derive marker output from the full live-location dataset.
     // Profile availability only changes marker presentation, never inclusion.
@@ -871,22 +998,28 @@ export default function MapScreen() {
       }
     });
 
-    const baseLocations = Array.from(baseLocationsById.values()).filter((loc) => {
-      if (loc.user_id === effectiveMyUserId || friendIdSet.has(loc.user_id)) {
-        return true;
-      }
+    const baseLocations = Array.from(baseLocationsById.values()).filter(
+      (loc) => {
+        if (loc.user_id === effectiveMyUserId || friendIdSet.has(loc.user_id)) {
+          return true;
+        }
 
-      if (!myLocation) return false;
-      const profile = profilesById[loc.user_id];
-      if (!isPubliclyDiscoverableProfile(profile)) return false;
+        if (!myLocation) return false;
+        const profile = profilesById[loc.user_id];
+        if (!isPubliclyDiscoverableProfile(profile)) return false;
 
-      return distanceInMeters(myLocation, loc) <= PUBLIC_DISCOVERY_RADIUS_METERS;
-    });
+        return (
+          distanceInMeters(myLocation, loc) <= PUBLIC_DISCOVERY_RADIUS_METERS
+        );
+      },
+    );
     const clusterableLocations = baseLocations.filter(
-      (loc) => loc.user_id !== effectiveMyUserId && !friendIdSet.has(loc.user_id)
+      (loc) =>
+        loc.user_id !== effectiveMyUserId && !friendIdSet.has(loc.user_id),
     );
     const alwaysRenderedLocations = baseLocations.filter(
-      (loc) => loc.user_id === effectiveMyUserId || friendIdSet.has(loc.user_id)
+      (loc) =>
+        loc.user_id === effectiveMyUserId || friendIdSet.has(loc.user_id),
     );
 
     const visited = new Set<string>();
@@ -958,7 +1091,7 @@ export default function MapScreen() {
       const overlapMembers = individualLocations.filter(
         (candidate) =>
           !overlapVisited.has(candidate.user_id) &&
-          distanceInMeters(loc, candidate) <= OVERLAP_THRESHOLD_METERS
+          distanceInMeters(loc, candidate) <= OVERLAP_THRESHOLD_METERS,
       );
 
       overlapMembers.forEach((member) => overlapVisited.add(member.user_id));
@@ -1097,12 +1230,15 @@ export default function MapScreen() {
         setFocusedClusterKey(null);
       }
     },
-    [focusedClusterKey]
+    [focusedClusterKey],
   );
 
   const meetMarkers = useMemo(() => {
     return meets
-      .filter((meet) => Number.isFinite(meet.latitude) && Number.isFinite(meet.longitude))
+      .filter(
+        (meet) =>
+          Number.isFinite(meet.latitude) && Number.isFinite(meet.longitude),
+      )
       .map((meet) => ({
         ...meet,
         latitude: Number(meet.latitude),
@@ -1110,10 +1246,14 @@ export default function MapScreen() {
       }));
   }, [meets]);
 
-
   useEffect(() => {
     const focusMeetId = params.focusMeetId;
-    if (!focusMeetId || typeof focusMeetId !== "string" || meetMarkers.length === 0) return;
+    if (
+      !focusMeetId ||
+      typeof focusMeetId !== "string" ||
+      meetMarkers.length === 0
+    )
+      return;
 
     const fallbackLatitude = Number(params.latitude);
     const fallbackLongitude = Number(params.longitude);
@@ -1122,7 +1262,8 @@ export default function MapScreen() {
     const targetLatitude = requestedMeet?.latitude ?? fallbackLatitude;
     const targetLongitude = requestedMeet?.longitude ?? fallbackLongitude;
 
-    if (!Number.isFinite(targetLatitude) || !Number.isFinite(targetLongitude)) return;
+    if (!Number.isFinite(targetLatitude) || !Number.isFinite(targetLongitude))
+      return;
 
     setSelectedUserId(null);
     setSelectedProfile(null);
@@ -1141,31 +1282,30 @@ export default function MapScreen() {
         latitudeDelta: 0.015,
         longitudeDelta: 0.015,
       },
-      700
+      700,
     );
   }, [meetMarkers, params.focusMeetId, params.latitude, params.longitude]);
 
   const userMarkerItems = useMemo(
     () =>
-      mapMarkers.filter(
-        (item): item is UserMarkerItem => item.type === "user"
-      ),
-    [mapMarkers]
+      mapMarkers.filter((item): item is UserMarkerItem => item.type === "user"),
+    [mapMarkers],
   );
 
   const clusterMarkerItems = useMemo(
     () =>
       mapMarkers.filter(
-        (item): item is ClusterMarkerItem => item.type === "cluster"
+        (item): item is ClusterMarkerItem => item.type === "cluster",
       ),
-    [mapMarkers]
+    [mapMarkers],
   );
 
   const currentUserLocation = useMemo(() => {
     if (!effectiveMyUserId) return null;
 
     const loc = locationsById[effectiveMyUserId];
-    if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) return null;
+    if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng))
+      return null;
 
     return loc;
   }, [effectiveMyUserId, locationsById]);
@@ -1187,11 +1327,13 @@ export default function MapScreen() {
 
       return coord;
     },
-    []
+    [],
   );
 
   useEffect(() => {
-    const nextUserIds = new Set(userMarkerItems.map((item) => item.loc.user_id));
+    const nextUserIds = new Set(
+      userMarkerItems.map((item) => item.loc.user_id),
+    );
 
     Object.keys(animatedUserCoordsRef.current).forEach((userId) => {
       if (!nextUserIds.has(userId)) {
@@ -1216,7 +1358,7 @@ export default function MapScreen() {
       const animatedCoord = getOrCreateAnimatedUserCoordinate(
         userId,
         nextCoordinate.latitude,
-        nextCoordinate.longitude
+        nextCoordinate.longitude,
       );
 
       const last = lastAnimatedTargetsRef.current[userId] ?? nextCoordinate;
@@ -1234,7 +1376,7 @@ export default function MapScreen() {
       if (Platform.OS === "android") {
         markerRefs.current[userId]?.animateMarkerToCoordinate(
           nextCoordinate,
-          MARKER_ANIMATION_DURATION_MS
+          MARKER_ANIMATION_DURATION_MS,
         );
         return;
       }
@@ -1256,7 +1398,10 @@ export default function MapScreen() {
   }, [selectedMeetId, meetMarkers]);
   const selectedMeetHasCoordinates = useMemo(() => {
     if (!selectedMeet) return false;
-    return Number.isFinite(selectedMeet.latitude) && Number.isFinite(selectedMeet.longitude);
+    return (
+      Number.isFinite(selectedMeet.latitude) &&
+      Number.isFinite(selectedMeet.longitude)
+    );
   }, [selectedMeet]);
   const selectedMeetDate = useMemo(() => {
     if (!selectedMeet?.start_time) return null;
@@ -1273,10 +1418,13 @@ export default function MapScreen() {
     };
   }, [selectedMeet?.start_time]);
   const selectedMeetAttendanceStatus = selectedMeet
-    ? myMeetAttendanceByMeetId[selectedMeet.id] ?? null
+    ? (myMeetAttendanceByMeetId[selectedMeet.id] ?? null)
     : null;
   const selectedMeetAttendanceSummary = selectedMeet
-    ? meetAttendeeSummaryByMeetId[selectedMeet.id] ?? { going: 0, interested: 0 }
+    ? (meetAttendeeSummaryByMeetId[selectedMeet.id] ?? {
+        going: 0,
+        interested: 0,
+      })
     : { going: 0, interested: 0 };
   const filteredMeetMarkers = useMemo(() => {
     const normalized = meetSearchQuery.trim().toLowerCase();
@@ -1296,7 +1444,10 @@ export default function MapScreen() {
 
   const animateSheetTo = useCallback(
     (nextHeight: number) => {
-      const clampedHeight = Math.max(collapsedSheetHeight, Math.min(expandedSheetHeight, nextHeight));
+      const clampedHeight = Math.max(
+        collapsedSheetHeight,
+        Math.min(expandedSheetHeight, nextHeight),
+      );
       sheetVisibleHeightRef.current = clampedHeight;
       Animated.spring(sheetHeightAnim, {
         toValue: clampedHeight,
@@ -1312,14 +1463,15 @@ export default function MapScreen() {
         }
       });
     },
-    [collapsedSheetHeight, expandedSheetHeight, sheetHeightAnim]
+    [collapsedSheetHeight, expandedSheetHeight, sheetHeightAnim],
   );
 
   const meetsSheetPanResponder = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_evt, gestureState) =>
-          Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 4,
+          Math.abs(gestureState.dy) > Math.abs(gestureState.dx) &&
+          Math.abs(gestureState.dy) > 4,
         onPanResponderGrant: () => {
           sheetHeightAnim.stopAnimation((value) => {
             sheetDragStartHeightRef.current = value;
@@ -1328,26 +1480,42 @@ export default function MapScreen() {
         },
         onPanResponderMove: (_evt, gestureState) => {
           const nextHeight = sheetDragStartHeightRef.current - gestureState.dy;
-          const clampedHeight = Math.max(collapsedSheetHeight, Math.min(expandedSheetHeight, nextHeight));
+          const clampedHeight = Math.max(
+            collapsedSheetHeight,
+            Math.min(expandedSheetHeight, nextHeight),
+          );
           sheetHeightAnim.setValue(clampedHeight);
           sheetVisibleHeightRef.current = clampedHeight;
         },
         onPanResponderRelease: (_evt, gestureState) => {
-          const draggedHeight = sheetDragStartHeightRef.current - gestureState.dy;
+          const draggedHeight =
+            sheetDragStartHeightRef.current - gestureState.dy;
           const velocityAdjustedHeight = draggedHeight - gestureState.vy * 120;
           const midpoint = (collapsedSheetHeight + expandedSheetHeight) / 2;
-          animateSheetTo(velocityAdjustedHeight > midpoint ? expandedSheetHeight : collapsedSheetHeight);
+          animateSheetTo(
+            velocityAdjustedHeight > midpoint
+              ? expandedSheetHeight
+              : collapsedSheetHeight,
+          );
         },
         onPanResponderTerminate: () => {
           animateSheetTo(collapsedSheetHeight);
         },
       }),
-    [animateSheetTo, collapsedSheetHeight, expandedSheetHeight, sheetHeightAnim]
+    [
+      animateSheetTo,
+      collapsedSheetHeight,
+      expandedSheetHeight,
+      sheetHeightAnim,
+    ],
   );
 
   const focusMyLocation = useCallback(async () => {
     let target = currentUserLocation
-      ? { latitude: currentUserLocation.lat, longitude: currentUserLocation.lng }
+      ? {
+          latitude: currentUserLocation.lat,
+          longitude: currentUserLocation.lng,
+        }
       : null;
 
     if (!target) {
@@ -1379,31 +1547,21 @@ export default function MapScreen() {
       }
     }
 
-    if (!mapRef.current || !target) return;
+    if (!target) return;
 
     closeProfileCard();
-    isProgrammaticCameraMoveRef.current = true;
-    const sheetHeight = Math.min(
-      screenHeight,
-      Math.max(0, sheetVisibleHeightRef.current)
-    );
-    const visibleMapHeight = Math.max(1, screenHeight - sheetHeight);
-    const latitudeOffset =
-      (FOCUS_ME_LATITUDE_DELTA * (screenHeight - visibleMapHeight)) /
-      (2 * screenHeight);
-    const longitudeDelta =
-      FOCUS_ME_LATITUDE_DELTA * (screenWidth / visibleMapHeight);
-
-    mapRef.current.animateToRegion(
-      {
-        latitude: target.latitude - latitudeOffset,
-        longitude: target.longitude,
-        latitudeDelta: FOCUS_ME_LATITUDE_DELTA,
-        longitudeDelta,
-      },
-      700
-    );
-  }, [currentUserLocation, effectiveMyUserId, screenHeight, screenWidth, setMyLiveLocation]);
+    hasUserMovedMapRef.current = false;
+    followMyLocationOnMap(target, {
+      duration: 700,
+      latitudeDelta: FOLLOW_LOCATION_LATITUDE_DELTA,
+      respectSheetOffset: true,
+    });
+  }, [
+    currentUserLocation,
+    effectiveMyUserId,
+    followMyLocationOnMap,
+    setMyLiveLocation,
+  ]);
 
   const toggleMeetMarkers = useCallback(() => {
     setShowMeetPins((visible) => !visible);
@@ -1427,7 +1585,8 @@ export default function MapScreen() {
 
   const updateSelectedMeetAttendance = useCallback(
     async (status: "going" | "interested") => {
-      if (!selectedMeet || !effectiveMyUserId || meetAttendanceSavingStatus) return;
+      if (!selectedMeet || !effectiveMyUserId || meetAttendanceSavingStatus)
+        return;
 
       try {
         setMeetAttendanceSavingStatus(status);
@@ -1438,7 +1597,7 @@ export default function MapScreen() {
             status,
             updated_at: new Date().toISOString(),
           },
-          { onConflict: "meet_id,user_id" }
+          { onConflict: "meet_id,user_id" },
         );
 
         if (error) {
@@ -1451,7 +1610,7 @@ export default function MapScreen() {
         setMeetAttendanceSavingStatus(null);
       }
     },
-    [effectiveMyUserId, meetAttendanceSavingStatus, refreshMeets, selectedMeet]
+    [effectiveMyUserId, meetAttendanceSavingStatus, refreshMeets, selectedMeet],
   );
 
   function renderSelectedMeetDetails() {
@@ -1479,12 +1638,22 @@ export default function MapScreen() {
           </Pressable>
         </View>
 
+        {selectedMeet.cover_image_url ? (
+          <Image
+            source={{ uri: selectedMeet.cover_image_url }}
+            style={styles.meetDetailCoverImage}
+            resizeMode="cover"
+          />
+        ) : null}
+
         <View style={styles.meetDetailRsvpRow}>
           {(["going", "interested"] as const).map((status) => {
             const selected = selectedMeetAttendanceStatus === status;
             const saving = meetAttendanceSavingStatus === status;
             const icon =
-              status === "going" ? "check-circle-outline" : "help-circle-outline";
+              status === "going"
+                ? "check-circle-outline"
+                : "help-circle-outline";
             const label = status === "going" ? "Going" : "Interested";
 
             return (
@@ -1541,7 +1710,9 @@ export default function MapScreen() {
           </View>
           <View style={styles.meetDetailAddressColumn}>
             <Text style={styles.meetDetailAddressText}>
-              {selectedMeet.address || selectedMeet.location_name || "Location TBD"}
+              {selectedMeet.address ||
+                selectedMeet.location_name ||
+                "Location TBD"}
             </Text>
             <Text style={styles.meetDetailStatusText}>
               {formatMeetStatus(selectedMeet.status)}
@@ -1569,7 +1740,9 @@ export default function MapScreen() {
               size={18}
               color="#111"
             />
-            <Text style={styles.meetDetailDirectionsButtonText}>Directions</Text>
+            <Text style={styles.meetDetailDirectionsButtonText}>
+              Directions
+            </Text>
           </Pressable>
           <Pressable
             style={styles.meetDetailAddButton}
@@ -1578,7 +1751,11 @@ export default function MapScreen() {
             }}
             disabled={Boolean(meetAttendanceSavingStatus)}
           >
-            <MaterialCommunityIcons name="calendar-plus" size={18} color="#fff" />
+            <MaterialCommunityIcons
+              name="calendar-plus"
+              size={18}
+              color="#fff"
+            />
             <Text style={styles.meetDetailAddButtonText}>Add</Text>
           </Pressable>
         </View>
@@ -1621,7 +1798,8 @@ export default function MapScreen() {
           accent_color: cached?.accent_color ?? null,
           is_active_premium:
             cached?.is_active_premium ??
-            (cached?.membership_plan === "premium" && cached?.membership_status === "active"),
+            (cached?.membership_plan === "premium" &&
+              cached?.membership_status === "active"),
         };
         setSelectedProfile(merged);
         setProfileError(null);
@@ -1648,7 +1826,7 @@ export default function MapScreen() {
 
       setProfileLoading(false);
     },
-    [myUserId, profilesById]
+    [myUserId, profilesById],
   );
 
   const closeProfileCard = () => {
@@ -1666,8 +1844,11 @@ export default function MapScreen() {
       "Finish your profile to add friends and interact with meets.",
       [
         { text: "Not now", style: "cancel" },
-        { text: "Go to Profile", onPress: () => router.push("/profile?onboarding=1") },
-      ]
+        {
+          text: "Go to Profile",
+          onPress: () => router.push("/profile?onboarding=1"),
+        },
+      ],
     );
   }, [router]);
 
@@ -1710,7 +1891,12 @@ export default function MapScreen() {
     } finally {
       setSendingRequest(false);
     }
-  }, [myUserId, selectedUserId, canUseProfileGatedActions, friendRelationshipState]);
+  }, [
+    myUserId,
+    selectedUserId,
+    canUseProfileGatedActions,
+    friendRelationshipState,
+  ]);
 
   const handleUserMarkerRef = useCallback((userId: string, marker: any) => {
     markerRefs.current[userId] = marker;
@@ -1751,7 +1937,7 @@ export default function MapScreen() {
             left: 110,
           },
           animated: true,
-        }
+        },
       );
     }
   }, []);
@@ -1823,8 +2009,12 @@ export default function MapScreen() {
     .filter(Boolean)
     .join(", ");
   const hasCars = selectedUserCars.length > 0;
-  const primaryProfileCar = selectedUserCars.find((car) => car.is_primary) ?? selectedUserCars[0] ?? null;
-  const publicProfileHeroUri = primaryProfileCar?.photo_url ?? selectedProfile?.photo_url ?? null;
+  const primaryProfileCar =
+    selectedUserCars.find((car) => car.is_primary) ??
+    selectedUserCars[0] ??
+    null;
+  const publicProfileHeroUri =
+    primaryProfileCar?.photo_url ?? selectedProfile?.photo_url ?? null;
   const socialEntries = [
     selectedProfile?.instagram_handle
       ? {
@@ -1860,13 +2050,13 @@ export default function MapScreen() {
       : null,
   ].filter(
     (
-      entry
+      entry,
     ): entry is {
       key: string;
       label: string;
       icon: keyof typeof MaterialCommunityIcons.glyphMap;
       url: string;
-    } => Boolean(entry)
+    } => Boolean(entry),
   );
 
   return (
@@ -1923,16 +2113,24 @@ export default function MapScreen() {
             pressed && styles.mapControlButtonPressed,
           ]}
         >
-          <MaterialCommunityIcons name="crosshairs-gps" size={30} color="#fff" />
+          <MaterialCommunityIcons
+            name="crosshairs-gps"
+            size={30}
+            color="#fff"
+          />
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={showMeetPins ? "Hide meet pins" : "Show meet pins"}
+          accessibilityLabel={
+            showMeetPins ? "Hide meet pins" : "Show meet pins"
+          }
           accessibilityState={{ selected: showMeetPins }}
           onPress={toggleMeetMarkers}
           style={({ pressed }) => [
             styles.mapControlButton,
-            showMeetPins ? styles.mapControlButtonActive : styles.mapControlButtonInactive,
+            showMeetPins
+              ? styles.mapControlButtonActive
+              : styles.mapControlButtonInactive,
             pressed && styles.mapControlButtonPressed,
           ]}
         >
@@ -1969,13 +2167,17 @@ export default function MapScreen() {
           >
             <ActivityIndicator size="small" color="#fff" />
             <Text style={{ color: "#fff", fontWeight: "600" }}>
-              {showLocationOverlay ? "Getting your location…" : "Loading map data…"}
+              {showLocationOverlay
+                ? "Getting your location…"
+                : "Loading map data…"}
             </Text>
           </View>
         </View>
       )}
 
-      <Animated.View style={[styles.meetsSheetContainer, { height: sheetHeightAnim }]}>
+      <Animated.View
+        style={[styles.meetsSheetContainer, { height: sheetHeightAnim }]}
+      >
         <View style={styles.meetsSheet} {...meetsSheetPanResponder.panHandlers}>
           <View style={styles.meetsSheetHandleWrap}>
             <View style={styles.meetsSheetHandle} />
@@ -1990,7 +2192,10 @@ export default function MapScreen() {
                 style={styles.meetsSearchInput}
               />
               <View pointerEvents="none" style={styles.meetsSearchIconWrap}>
-                <MaterialCommunityIcons name="magnify" style={styles.meetsSearchIcon} />
+                <MaterialCommunityIcons
+                  name="magnify"
+                  style={styles.meetsSearchIcon}
+                />
               </View>
             </View>
           ) : null}
@@ -2002,53 +2207,88 @@ export default function MapScreen() {
             ]}
             showsVerticalScrollIndicator={false}
           >
-            {selectedMeet ? renderSelectedMeetDetails() : filteredMeetMarkers.map((meet) => {
-              const day = meet.start_time ? new Date(meet.start_time) : null;
-              const dateTop = day && Number.isFinite(day.getTime()) ? String(day.getDate()).padStart(2, "0") : "--";
-              const dateBottom = day && Number.isFinite(day.getTime()) ? day.toLocaleString(undefined, { month: "short" }).toUpperCase() : "TBD";
-              const meetTime = formatMeetRowTime(meet.start_time);
-              const rowStatus = getMeetRowStatusLabel(meet.status, meet.start_time, meet.end_time);
-              const goingCount = meetAttendeeSummaryByMeetId[meet.id]?.going ?? 0;
-              const interestedCount = meetAttendeeSummaryByMeetId[meet.id]?.interested ?? 0;
-              return (
-                <Pressable
-                  key={`sheet-meet-${meet.id}`}
-                  onPress={() => {
-                    setSelectedMeetId(meet.id);
-                    if (mapRef.current) {
-                      isProgrammaticCameraMoveRef.current = true;
-                      mapRef.current.animateCamera({
-                        center: { latitude: meet.latitude, longitude: meet.longitude },
-                        zoom: 14,
-                      });
-                    }
-                  }}
-                  style={({ pressed }) => [styles.meetRowCard, pressed && { opacity: 0.88 }]}
-                >
-                  <View style={styles.meetLeftColumn}>
-                    <View style={styles.meetDateBlock}>
-                      <Text style={styles.meetDateDay}>{dateTop}</Text>
-                      <Text style={styles.meetDateMonth}>{dateBottom}</Text>
-                    </View>
-                    <Text numberOfLines={1} style={styles.meetDateTime}>{meetTime}</Text>
-                  </View>
-                  <View style={styles.meetRightColumn}>
-                    <Text numberOfLines={2} style={styles.meetRowTitle}>{meet.title || "Meet"}</Text>
-                    <Text numberOfLines={1} style={styles.meetRowMeta}>
-                      {meet.location_name || meet.address || "Location TBD"}
-                    </Text>
-                    <View style={styles.meetActionsRow}>
-                      <Text style={styles.meetActionText}>✓ {goingCount}</Text>
-                      <Text style={styles.meetActionDot}>◦</Text>
-                      <Text style={styles.meetActionText}>◔ {interestedCount}</Text>
-                    </View>
-                    <Text numberOfLines={1} style={styles.meetRowStatusText}>
-                      {rowStatus}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
+            {selectedMeet
+              ? renderSelectedMeetDetails()
+              : filteredMeetMarkers.map((meet) => {
+                  const day = meet.start_time
+                    ? new Date(meet.start_time)
+                    : null;
+                  const dateTop =
+                    day && Number.isFinite(day.getTime())
+                      ? String(day.getDate()).padStart(2, "0")
+                      : "--";
+                  const dateBottom =
+                    day && Number.isFinite(day.getTime())
+                      ? day
+                          .toLocaleString(undefined, { month: "short" })
+                          .toUpperCase()
+                      : "TBD";
+                  const meetTime = formatMeetRowTime(meet.start_time);
+                  const rowStatus = getMeetRowStatusLabel(
+                    meet.status,
+                    meet.start_time,
+                    meet.end_time,
+                  );
+                  const goingCount =
+                    meetAttendeeSummaryByMeetId[meet.id]?.going ?? 0;
+                  const interestedCount =
+                    meetAttendeeSummaryByMeetId[meet.id]?.interested ?? 0;
+                  return (
+                    <Pressable
+                      key={`sheet-meet-${meet.id}`}
+                      onPress={() => {
+                        setSelectedMeetId(meet.id);
+                        if (mapRef.current) {
+                          isProgrammaticCameraMoveRef.current = true;
+                          mapRef.current.animateCamera({
+                            center: {
+                              latitude: meet.latitude,
+                              longitude: meet.longitude,
+                            },
+                            zoom: 14,
+                          });
+                        }
+                      }}
+                      style={({ pressed }) => [
+                        styles.meetRowCard,
+                        pressed && { opacity: 0.88 },
+                      ]}
+                    >
+                      <View style={styles.meetLeftColumn}>
+                        <View style={styles.meetDateBlock}>
+                          <Text style={styles.meetDateDay}>{dateTop}</Text>
+                          <Text style={styles.meetDateMonth}>{dateBottom}</Text>
+                        </View>
+                        <Text numberOfLines={1} style={styles.meetDateTime}>
+                          {meetTime}
+                        </Text>
+                      </View>
+                      <View style={styles.meetRightColumn}>
+                        <Text numberOfLines={2} style={styles.meetRowTitle}>
+                          {meet.title || "Meet"}
+                        </Text>
+                        <Text numberOfLines={1} style={styles.meetRowMeta}>
+                          {meet.location_name || meet.address || "Location TBD"}
+                        </Text>
+                        <View style={styles.meetActionsRow}>
+                          <Text style={styles.meetActionText}>
+                            ✓ {goingCount}
+                          </Text>
+                          <Text style={styles.meetActionDot}>◦</Text>
+                          <Text style={styles.meetActionText}>
+                            ◔ {interestedCount}
+                          </Text>
+                        </View>
+                        <Text
+                          numberOfLines={1}
+                          style={styles.meetRowStatusText}
+                        >
+                          {rowStatus}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
           </ScrollView>
         </View>
       </Animated.View>
@@ -2058,7 +2298,8 @@ export default function MapScreen() {
           <View
             style={[
               styles.publicProfileFullCard,
-              selectedProfile?.is_active_premium && selectedProfile?.accent_color
+              selectedProfile?.is_active_premium &&
+              selectedProfile?.accent_color
                 ? { borderColor: selectedProfile.accent_color }
                 : null,
             ]}
@@ -2070,10 +2311,16 @@ export default function MapScreen() {
             >
               <View style={styles.publicProfileHero}>
                 {publicProfileHeroUri ? (
-                  <Image source={{ uri: publicProfileHeroUri }} style={styles.publicProfileHeroImage} />
+                  <Image
+                    source={{ uri: publicProfileHeroUri }}
+                    style={styles.publicProfileHeroImage}
+                  />
                 ) : null}
                 <View style={styles.publicProfileHeroScrim} />
-                <Pressable onPress={closeProfileCard} style={styles.publicProfileCloseButton}>
+                <Pressable
+                  onPress={closeProfileCard}
+                  style={styles.publicProfileCloseButton}
+                >
                   <MaterialCommunityIcons name="close" size={22} color="#fff" />
                 </Pressable>
               </View>
@@ -2084,7 +2331,8 @@ export default function MapScreen() {
                     source={{ uri: selectedProfile.photo_url }}
                     style={[
                       styles.publicProfileAvatar,
-                      selectedProfile?.is_active_premium && selectedProfile?.accent_color
+                      selectedProfile?.is_active_premium &&
+                      selectedProfile?.accent_color
                         ? { borderColor: selectedProfile.accent_color }
                         : null,
                     ]}
@@ -2094,19 +2342,24 @@ export default function MapScreen() {
                     style={[
                       styles.publicProfileAvatar,
                       styles.publicProfileAvatarFallback,
-                      selectedProfile?.is_active_premium && selectedProfile?.accent_color
+                      selectedProfile?.is_active_premium &&
+                      selectedProfile?.accent_color
                         ? { borderColor: selectedProfile.accent_color }
                         : null,
                     ]}
                   >
-                    <Text style={styles.publicProfileAvatarInitials}>{initials}</Text>
+                    <Text style={styles.publicProfileAvatarInitials}>
+                      {initials}
+                    </Text>
                   </View>
                 )}
 
                 <View style={styles.publicProfileIdentityRow}>
                   <View style={styles.publicProfileNameWrap}>
                     <View style={styles.profileNameRow}>
-                      <Text style={styles.publicProfileName}>{displayName}</Text>
+                      <Text style={styles.publicProfileName}>
+                        {displayName}
+                      </Text>
                       {selectedProfile?.is_active_premium ? (
                         <View style={styles.premiumBadge}>
                           <Text style={styles.premiumBadgeText}>PREMIUM</Text>
@@ -2114,12 +2367,21 @@ export default function MapScreen() {
                       ) : null}
                     </View>
                     {selectedProfile?.username ? (
-                      <Text style={styles.publicProfileUsername}>@{selectedProfile.username}</Text>
+                      <Text style={styles.publicProfileUsername}>
+                        @{selectedProfile.username}
+                      </Text>
                     ) : null}
-                    {locationLabel ? <Text style={styles.publicProfileMeta}>{locationLabel}</Text> : null}
+                    {locationLabel ? (
+                      <Text style={styles.publicProfileMeta}>
+                        {locationLabel}
+                      </Text>
+                    ) : null}
                     {locationsById[selectedUserId]?.updated_at ? (
                       <Text style={styles.publicProfileMeta}>
-                        Last seen {formatLastSeen(locationsById[selectedUserId]?.updated_at)}
+                        Last seen{" "}
+                        {formatLastSeen(
+                          locationsById[selectedUserId]?.updated_at,
+                        )}
                       </Text>
                     ) : null}
                   </View>
@@ -2137,16 +2399,24 @@ export default function MapScreen() {
                         ]}
                         accessibilityLabel={social.label}
                       >
-                        <MaterialCommunityIcons name={social.icon} size={19} color="#fff" />
+                        <MaterialCommunityIcons
+                          name={social.icon}
+                          size={19}
+                          color="#fff"
+                        />
                       </Pressable>
                     ))}
                   </View>
                 ) : null}
 
                 {selectedProfile?.bio ? (
-                  <Text style={styles.publicProfileBio}>{selectedProfile.bio}</Text>
+                  <Text style={styles.publicProfileBio}>
+                    {selectedProfile.bio}
+                  </Text>
                 ) : (
-                  <Text style={styles.publicProfileMutedText}>No bio added.</Text>
+                  <Text style={styles.publicProfileMutedText}>
+                    No bio added.
+                  </Text>
                 )}
 
                 {profileLoading ? (
@@ -2154,13 +2424,19 @@ export default function MapScreen() {
                     <ActivityIndicator color="#fff" />
                   </View>
                 ) : null}
-                {profileError ? <Text style={styles.errorText}>{profileError}</Text> : null}
+                {profileError ? (
+                  <Text style={styles.errorText}>{profileError}</Text>
+                ) : null}
 
                 {selectedUserId !== myUserId ? (
                   <View style={styles.publicProfileActionRow}>
                     {friendRelationshipState !== "friends" ? (
                       <Pressable
-                        onPress={friendRelationshipState === "none" ? sendFriendRequest : undefined}
+                        onPress={
+                          friendRelationshipState === "none"
+                            ? sendFriendRequest
+                            : undefined
+                        }
                         disabled={
                           sendingRequest ||
                           !!profileError ||
@@ -2169,7 +2445,8 @@ export default function MapScreen() {
                         }
                         style={({ pressed }) => [
                           styles.publicProfileFriendButton,
-                          friendRelationshipState !== "none" && styles.friendBtnDisabled,
+                          friendRelationshipState !== "none" &&
+                            styles.friendBtnDisabled,
                           (pressed || sendingRequest) && { opacity: 0.8 },
                         ]}
                       >
@@ -2181,7 +2458,8 @@ export default function MapScreen() {
                               name={
                                 friendRelationshipState === "request_sent"
                                   ? "clock-check-outline"
-                                  : friendRelationshipState === "request_received"
+                                  : friendRelationshipState ===
+                                      "request_received"
                                     ? "account-clock-outline"
                                     : "account-plus"
                               }
@@ -2200,7 +2478,11 @@ export default function MapScreen() {
                       </Pressable>
                     ) : (
                       <View style={styles.publicProfileFriendBadge}>
-                        <MaterialCommunityIcons name="account-check" size={18} color="#fff" />
+                        <MaterialCommunityIcons
+                          name="account-check"
+                          size={18}
+                          color="#fff"
+                        />
                         <Text style={styles.friendBadgeText}>Friends</Text>
                       </View>
                     )}
@@ -2210,39 +2492,73 @@ export default function MapScreen() {
 
               <View style={styles.publicProfileTabsRow}>
                 <View style={styles.publicProfileTabActive}>
-                  <MaterialCommunityIcons name="car-sports" size={19} color="#ef4444" />
+                  <MaterialCommunityIcons
+                    name="car-sports"
+                    size={19}
+                    color="#ef4444"
+                  />
                   <Text style={styles.publicProfileTabActiveText}>Cars</Text>
                 </View>
                 <View style={styles.publicProfileTab}>
-                  <MaterialCommunityIcons name="calendar-blank-outline" size={19} color="#bcbcbc" />
+                  <MaterialCommunityIcons
+                    name="calendar-blank-outline"
+                    size={19}
+                    color="#bcbcbc"
+                  />
                   <Text style={styles.publicProfileTabText}>Meets</Text>
                 </View>
               </View>
 
               <View style={styles.publicProfileCarsList}>
                 {!hasCars ? (
-                  <Text style={styles.publicProfileMutedText}>No cars listed.</Text>
+                  <Text style={styles.publicProfileMutedText}>
+                    No cars listed.
+                  </Text>
                 ) : (
                   selectedUserCars.map((car) => {
-                    const title = [car.year, car.make, car.model].filter(Boolean).join(" ");
-                    const subtitle = [car.color, car.trim].filter(Boolean).join(" � ");
+                    const title = [car.year, car.make, car.model]
+                      .filter(Boolean)
+                      .join(" ");
+                    const subtitle = [car.color, car.trim]
+                      .filter(Boolean)
+                      .join(" � ");
                     return (
                       <View key={car.id} style={styles.publicProfileCarCard}>
                         {car.photo_url ? (
-                          <Image source={{ uri: car.photo_url }} style={styles.publicProfileCarImage} />
+                          <Image
+                            source={{ uri: car.photo_url }}
+                            style={styles.publicProfileCarImage}
+                          />
                         ) : (
-                          <View style={[styles.publicProfileCarImage, styles.carPhotoFallback]}>
-                            <Text style={styles.carPhotoFallbackText}>No Photo</Text>
+                          <View
+                            style={[
+                              styles.publicProfileCarImage,
+                              styles.carPhotoFallback,
+                            ]}
+                          >
+                            <Text style={styles.carPhotoFallbackText}>
+                              No Photo
+                            </Text>
                           </View>
                         )}
                         <View style={styles.publicProfileCarBody}>
                           <View style={styles.carNameRow}>
-                            <Text style={styles.publicProfileCarTitle}>{title || "Unknown car"}</Text>
-                            {car.is_primary ? <Text style={styles.primaryTag}>Primary</Text> : null}
+                            <Text style={styles.publicProfileCarTitle}>
+                              {title || "Unknown car"}
+                            </Text>
+                            {car.is_primary ? (
+                              <Text style={styles.primaryTag}>Primary</Text>
+                            ) : null}
                           </View>
-                          {subtitle ? <Text style={styles.publicProfileCarMeta}>{subtitle}</Text> : null}
+                          {subtitle ? (
+                            <Text style={styles.publicProfileCarMeta}>
+                              {subtitle}
+                            </Text>
+                          ) : null}
                           {car.description ? (
-                            <Text style={styles.publicProfileCarDescription}>{car.description}</Text>
+                            <Text style={styles.publicProfileCarDescription}>
+                              {car.description}
+                            </Text>
                           ) : null}
                         </View>
                       </View>

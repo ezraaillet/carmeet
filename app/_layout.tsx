@@ -1,4 +1,5 @@
 import { MapDataProvider, useMapData } from "@/components/MapDataProvider";
+import { UserAccountProvider } from "@/components/UserAccountProvider";
 import { Pressable, Text, View } from "react-native";
 import { Tabs, router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -303,8 +304,10 @@ function RootLayoutInner() {
 
 export default function RootLayout() {
   return (
-    <MapDataProvider>
-      <RootLayoutInner />
-    </MapDataProvider>
+    <UserAccountProvider>
+      <MapDataProvider>
+        <RootLayoutInner />
+      </MapDataProvider>
+    </UserAccountProvider>
   );
 }

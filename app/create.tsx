@@ -1,8 +1,10 @@
+import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,22 +14,16 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useMemo, useState } from "react";
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "@/styles/themes";
-import { useMapData } from "@/components/MapDataProvider";
-import { supabase } from "@/database/supabase";
+import { router } from "expo-router";
 import styles from "@/styles/homestyles";
-
-type MembershipRow = {
-  id: string;
-  user_id: string;
-  plan: "free" | "premium";
-  status: "active" | "inactive" | "cancelled" | "past_due" | "trialing";
-};
+import { supabase } from "@/database/supabase";
+import { useFocusEffect } from "@react-navigation/native";
+import { useMapData } from "@/components/MapDataProvider";
+import { useUserAccount } from "@/components/UserAccountProvider";
 
 type MeetCoordinates = {
   latitude: number;
@@ -67,10 +63,20 @@ function monthStartForKey(dateKey: string) {
 }
 
 function buildCalendarDays(monthDate: Date) {
-  const firstOfMonth = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1, 12, 0, 0, 0);
+  const firstOfMonth = new Date(
+    monthDate.getFullYear(),
+    monthDate.getMonth(),
+    1,
+    12,
+    0,
+    0,
+    0,
+  );
   const mondayOffset = (firstOfMonth.getDay() + 6) % 7;
   const firstCalendarDay = addDays(firstOfMonth, -mondayOffset);
-  return Array.from({ length: 42 }, (_unused, index) => addDays(firstCalendarDay, index));
+  return Array.from({ length: 42 }, (_unused, index) =>
+    addDays(firstCalendarDay, index),
+  );
 }
 
 function toDateKey(date: Date) {
@@ -130,9 +136,9 @@ function formatTimeOption(value: string) {
 
 export default function CreateScreen() {
   const { myUserId, refreshMeets } = useMapData();
+  const { account, isPremium, refreshAccount } = useUserAccount();
+  const effectiveUserId = myUserId ?? account?.userId ?? null;
 
-  const [membership, setMembership] = useState<MembershipRow | null>(null);
-  const [membershipLoading, setMembershipLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,23 +148,31 @@ export default function CreateScreen() {
   const [locationName, setLocationName] = useState("");
   const [address, setAddress] = useState("");
   const [coordinates, setCoordinates] = useState<MeetCoordinates | null>(null);
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [coverUploading, setCoverUploading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(defaultMeetDate);
-  const [visibleMonth, setVisibleMonth] = useState(() => monthStartForKey(defaultMeetDate()));
+  const [visibleMonth, setVisibleMonth] = useState(() =>
+    monthStartForKey(defaultMeetDate()),
+  );
   const [startTime, setStartTime] = useState("19:00");
   const [endTime, setEndTime] = useState("");
-  const [openTimePicker, setOpenTimePicker] = useState<"start" | "end" | null>(null);
+  const [openTimePicker, setOpenTimePicker] = useState<"start" | "end" | null>(
+    null,
+  );
   const [isDateTimePickerOpen, setIsDateTimePickerOpen] = useState(false);
   const [maxAttendees, setMaxAttendees] = useState("");
   const [isPublic, setIsPublic] = useState(true);
-  const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
-  const calendarWeeks = useMemo(
-    () => Array.from({ length: 6 }, (_unused, index) => calendarDays.slice(index * 7, index * 7 + 7)),
-    [calendarDays]
+  const calendarDays = useMemo(
+    () => buildCalendarDays(visibleMonth),
+    [visibleMonth],
   );
-
-  const membershipPlan = membership?.plan ?? "free";
-  const membershipStatus = membership?.status ?? "inactive";
-  const isPremium = membershipPlan === "premium" && membershipStatus === "active";
+  const calendarWeeks = useMemo(
+    () =>
+      Array.from({ length: 6 }, (_unused, index) =>
+        calendarDays.slice(index * 7, index * 7 + 7),
+      ),
+    [calendarDays],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -174,43 +188,8 @@ export default function CreateScreen() {
       return () => {
         active = false;
       };
-    }, [])
+    }, []),
   );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadMembership() {
-      if (!myUserId) {
-        setMembership(null);
-        setMembershipLoading(false);
-        return;
-      }
-
-      setMembershipLoading(true);
-      const { data, error: loadErr } = await supabase
-        .from("user_memberships")
-        .select("id, user_id, plan, status")
-        .eq("user_id", myUserId)
-        .maybeSingle<MembershipRow>();
-
-      if (cancelled) return;
-
-      if (loadErr) {
-        setMembership(null);
-      } else {
-        setMembership(data ?? null);
-      }
-
-      setMembershipLoading(false);
-    }
-
-    void loadMembership();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [myUserId]);
 
   const canSubmit = useMemo(() => {
     return (
@@ -219,16 +198,105 @@ export default function CreateScreen() {
       (Boolean(address.trim()) || Boolean(coordinates)) &&
       Boolean(selectedDate) &&
       Boolean(startTime.trim()) &&
-      !saving
+      !saving &&
+      !coverUploading
     );
-  }, [address, coordinates, locationName, saving, selectedDate, startTime, title]);
+  }, [
+    address,
+    coordinates,
+    coverUploading,
+    locationName,
+    saving,
+    selectedDate,
+    startTime,
+    title,
+  ]);
 
+  function resetCreateMeetForm() {
+    const nextDefaultDate = defaultMeetDate();
+
+    setTitle("");
+    setDescription("");
+    setLocationName("");
+    setAddress("");
+    setCoordinates(null);
+    setCoverImageUrl(null);
+    setSelectedDate(nextDefaultDate);
+    setVisibleMonth(monthStartForKey(nextDefaultDate));
+    setStartTime("19:00");
+    setEndTime("");
+    setOpenTimePicker(null);
+    setIsDateTimePickerOpen(false);
+    setMaxAttendees("");
+    setIsPublic(true);
+    setError(null);
+  }
+  async function uploadMeetCoverImage(
+    asset: ImagePicker.ImagePickerAsset,
+    userId: string,
+  ) {
+    const response = await fetch(asset.uri);
+    const arrayBuffer = await response.arrayBuffer();
+    const uriParts = asset.uri.split(".");
+    const ext = uriParts.length > 1 ? uriParts.pop() || "jpg" : "jpg";
+    const path = `${userId}/meets/${Date.now()}.${ext}`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from("avatars")
+      .upload(path, arrayBuffer, {
+        contentType: asset.mimeType ?? "image/jpeg",
+        upsert: true,
+      });
+
+    if (uploadErr) throw uploadErr;
+
+    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  async function pickMeetCoverImage() {
+    if (!effectiveUserId || coverUploading) return;
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        "Photo access needed",
+        "Allow photo library access to add a meet cover image.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.85,
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+
+    setCoverUploading(true);
+    try {
+      const uploadedUrl = await uploadMeetCoverImage(
+        result.assets[0],
+        effectiveUserId,
+      );
+      setCoverImageUrl(uploadedUrl);
+    } catch (e: any) {
+      Alert.alert("Could not upload cover", e?.message ?? "Try again.");
+    } finally {
+      setCoverUploading(false);
+    }
+  }
   async function useCurrentLocation() {
     setLocating(true);
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (perm.status !== "granted") {
-        Alert.alert("Location needed", "Allow location access to use your current spot.");
+        Alert.alert(
+          "Location needed",
+          "Allow location access to use your current spot.",
+        );
         return;
       }
 
@@ -256,7 +324,11 @@ export default function CreateScreen() {
   const todayKey = localDateKey(new Date());
   const tomorrowKey = toDateKey(addDays(new Date(), 1));
   const activeQuickDate =
-    selectedDate === todayKey ? "today" : selectedDate === tomorrowKey ? "tomorrow" : "more";
+    selectedDate === todayKey
+      ? "today"
+      : selectedDate === tomorrowKey
+        ? "tomorrow"
+        : "more";
   const monthLabel = visibleMonth.toLocaleDateString(undefined, {
     month: "long",
     year: "numeric",
@@ -266,13 +338,23 @@ export default function CreateScreen() {
   }`;
 
   async function createMeet() {
-    if (!myUserId || !isPremium) return;
+    if (!effectiveUserId) return;
+
+    const latestAccount = await refreshAccount(
+      effectiveUserId,
+      account?.email ?? null,
+    );
+    if (!latestAccount?.isPremium) return;
 
     setError(null);
 
     const parsedStart = combineDateAndTime(selectedDate, startTime);
-    const parsedEnd = endTime ? combineDateAndTime(selectedDate, endTime) : null;
-    const parsedMax = maxAttendees.trim() ? Number.parseInt(maxAttendees.trim(), 10) : null;
+    const parsedEnd = endTime
+      ? combineDateAndTime(selectedDate, endTime)
+      : null;
+    const parsedMax = maxAttendees.trim()
+      ? Number.parseInt(maxAttendees.trim(), 10)
+      : null;
 
     if (!title.trim() || !locationName.trim()) {
       setError("Title and location name are required.");
@@ -303,7 +385,9 @@ export default function CreateScreen() {
 
     let resolvedCoordinates = coordinates;
     if (!resolvedCoordinates) {
-      const geocodeQuery = [address.trim(), locationName.trim()].filter(Boolean).join(" ");
+      const geocodeQuery = [address.trim(), locationName.trim()]
+        .filter(Boolean)
+        .join(" ");
       const geocodeResults = await Location.geocodeAsync(geocodeQuery);
       const firstResult = geocodeResults[0];
 
@@ -325,14 +409,14 @@ export default function CreateScreen() {
       .insert({
         title: title.trim(),
         description: description.trim() || null,
-        cover_image_url: null,
+        cover_image_url: coverImageUrl,
         location_name: locationName.trim(),
         address: address.trim() || null,
         latitude: resolvedCoordinates.latitude,
         longitude: resolvedCoordinates.longitude,
         start_time: parsedStart,
         end_time: parsedEnd,
-        created_by: myUserId,
+        created_by: effectiveUserId,
         is_public: isPublic,
         max_attendees: parsedMax,
         status: "upcoming",
@@ -346,8 +430,9 @@ export default function CreateScreen() {
       return;
     }
 
-    await refreshMeets(myUserId);
+    await refreshMeets(effectiveUserId);
     setSaving(false);
+    resetCreateMeetForm();
 
     router.navigate({
       pathname: "/map",
@@ -359,7 +444,7 @@ export default function CreateScreen() {
     });
   }
 
-  if (!myUserId || membershipLoading) {
+  if (!effectiveUserId) {
     return (
       <View style={styles.createPlaceholderContainer}>
         <ActivityIndicator />
@@ -372,30 +457,57 @@ export default function CreateScreen() {
       <View style={styles.createPremiumScreen}>
         <View style={styles.createPremiumCard}>
           <View style={styles.createPremiumIconWrap}>
-            <MaterialCommunityIcons name="calendar-star" size={30} color={colors.primary} />
+            <MaterialCommunityIcons
+              name="calendar-star"
+              size={30}
+              color={colors.primary}
+            />
           </View>
-          <Text style={styles.createPremiumTitle}>Create meets with Premium</Text>
+          <Text style={styles.createPremiumTitle}>
+            Create meets with Premium
+          </Text>
           <Text style={styles.createPremiumSubtitle}>
-            Host cruises, parking lot hangs, cars and coffee runs, and invite the local scene to pull up.
+            Host cruises, parking lot hangs, cars and coffee runs, and invite
+            the local scene to pull up.
           </Text>
 
           <View style={styles.createPremiumFeatureList}>
             <View style={styles.createPremiumFeatureRow}>
-              <MaterialCommunityIcons name="map-marker-plus" size={19} color={colors.primary} />
-              <Text style={styles.createPremiumFeatureText}>Drop public meet pins on the map</Text>
+              <MaterialCommunityIcons
+                name="map-marker-plus"
+                size={19}
+                color={colors.primary}
+              />
+              <Text style={styles.createPremiumFeatureText}>
+                Drop public meet pins on the map
+              </Text>
             </View>
             <View style={styles.createPremiumFeatureRow}>
-              <MaterialCommunityIcons name="account-group" size={19} color={colors.primary} />
-              <Text style={styles.createPremiumFeatureText}>Track Going and Interested drivers</Text>
+              <MaterialCommunityIcons
+                name="account-group"
+                size={19}
+                color={colors.primary}
+              />
+              <Text style={styles.createPremiumFeatureText}>
+                Track Going and Interested drivers
+              </Text>
             </View>
             <View style={styles.createPremiumFeatureRow}>
-              <MaterialCommunityIcons name="palette-outline" size={19} color={colors.primary} />
-              <Text style={styles.createPremiumFeatureText}>Unlock profile customizations and socials</Text>
+              <MaterialCommunityIcons
+                name="palette-outline"
+                size={19}
+                color={colors.primary}
+              />
+              <Text style={styles.createPremiumFeatureText}>
+                Unlock profile customizations and socials
+              </Text>
             </View>
           </View>
 
           <Pressable style={styles.createPremiumButton}>
-            <Text style={styles.createPremiumButtonText}>Upgrade to Premium</Text>
+            <Text style={styles.createPremiumButtonText}>
+              Upgrade to Premium
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -459,8 +571,14 @@ export default function CreateScreen() {
               <ActivityIndicator />
             ) : (
               <>
-                <MaterialCommunityIcons name="crosshairs-gps" size={18} color={colors.offwhite} />
-                <Text style={styles.createSecondaryActionText}>Use current location</Text>
+                <MaterialCommunityIcons
+                  name="crosshairs-gps"
+                  size={18}
+                  color={colors.offwhite}
+                />
+                <Text style={styles.createSecondaryActionText}>
+                  Use current location
+                </Text>
               </>
             )}
           </Pressable>
@@ -470,16 +588,77 @@ export default function CreateScreen() {
             </Text>
           ) : null}
 
+          <Text style={styles.createMeetFieldLabel}>Cover photo</Text>
+          <Pressable
+            onPress={pickMeetCoverImage}
+            disabled={coverUploading}
+            style={[
+              styles.createCoverPicker,
+              coverImageUrl && styles.createCoverPickerFilled,
+              coverUploading && { opacity: 0.72 },
+            ]}
+          >
+            {coverImageUrl ? (
+              <Image
+                source={{ uri: coverImageUrl }}
+                style={styles.createCoverImagePreview}
+              />
+            ) : (
+              <View style={styles.createCoverPlaceholder}>
+                <MaterialCommunityIcons
+                  name="image-plus"
+                  size={28}
+                  color={colors.primary}
+                />
+              </View>
+            )}
+            <View style={styles.createCoverActionOverlay}>
+              {coverUploading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <MaterialCommunityIcons
+                    name={coverImageUrl ? "image-edit" : "image-plus"}
+                    size={17}
+                    color={colors.offwhite}
+                  />
+                  <Text style={styles.createCoverActionText}>
+                    {coverImageUrl ? "Change cover" : "Choose image"}
+                  </Text>
+                </>
+              )}
+            </View>
+          </Pressable>
+          {coverImageUrl ? (
+            <Pressable
+              onPress={() => setCoverImageUrl(null)}
+              disabled={coverUploading}
+              style={styles.createCoverRemoveButton}
+            >
+              <Text style={styles.createCoverRemoveText}>
+                Remove cover photo
+              </Text>
+            </Pressable>
+          ) : null}
+
           <Pressable
             onPress={() => setIsDateTimePickerOpen(true)}
             style={styles.createDateTimeTrigger}
           >
             <View style={styles.createDateTimeTriggerIcon}>
-              <MaterialCommunityIcons name="calendar-clock" size={21} color={colors.primary} />
+              <MaterialCommunityIcons
+                name="calendar-clock"
+                size={21}
+                color={colors.primary}
+              />
             </View>
             <View style={styles.createDateTimeTriggerTextWrap}>
-              <Text style={styles.createDateTimeTriggerTitle}>Choose date & time</Text>
-              <Text style={styles.createDateTimeTriggerSummary}>{dateTimeSummary}</Text>
+              <Text style={styles.createDateTimeTriggerTitle}>
+                Choose date & time
+              </Text>
+              <Text style={styles.createDateTimeTriggerSummary}>
+                {dateTimeSummary}
+              </Text>
             </View>
             <MaterialCommunityIcons
               name="chevron-down"
@@ -487,7 +666,6 @@ export default function CreateScreen() {
               color={colors.silver}
             />
           </Pressable>
-
 
           <Text style={styles.createMeetFieldLabel}>Description</Text>
           <TextInput
@@ -515,7 +693,10 @@ export default function CreateScreen() {
               <Text style={styles.createMeetFieldLabel}>Visibility</Text>
               <Pressable
                 onPress={() => setIsPublic((prev) => !prev)}
-                style={[styles.createVisibilityToggle, isPublic && styles.createVisibilityToggleActive]}
+                style={[
+                  styles.createVisibilityToggle,
+                  isPublic && styles.createVisibilityToggleActive,
+                ]}
               >
                 <MaterialCommunityIcons
                   name={isPublic ? "earth" : "lock-outline"}
@@ -559,19 +740,21 @@ export default function CreateScreen() {
         }}
       >
         <View style={styles.createDateTimeModalBackdrop}>
-            <View style={styles.createDateTimeModalCard}>
-              <View style={styles.createDateQuickRow}>
+          <View style={styles.createDateTimeModalCard}>
+            <View style={styles.createDateQuickRow}>
               <Pressable
                 onPress={() => pickDate(todayKey)}
                 style={[
                   styles.createDateQuickButton,
-                  activeQuickDate === "today" && styles.createDateQuickButtonActive,
+                  activeQuickDate === "today" &&
+                    styles.createDateQuickButtonActive,
                 ]}
               >
                 <Text
                   style={[
                     styles.createDateQuickButtonText,
-                    activeQuickDate === "today" && styles.createDateQuickButtonTextActive,
+                    activeQuickDate === "today" &&
+                      styles.createDateQuickButtonTextActive,
                   ]}
                 >
                   Today
@@ -581,13 +764,15 @@ export default function CreateScreen() {
                 onPress={() => pickDate(tomorrowKey)}
                 style={[
                   styles.createDateQuickButton,
-                  activeQuickDate === "tomorrow" && styles.createDateQuickButtonActive,
+                  activeQuickDate === "tomorrow" &&
+                    styles.createDateQuickButtonActive,
                 ]}
               >
                 <Text
                   style={[
                     styles.createDateQuickButtonText,
-                    activeQuickDate === "tomorrow" && styles.createDateQuickButtonTextActive,
+                    activeQuickDate === "tomorrow" &&
+                      styles.createDateQuickButtonTextActive,
                   ]}
                 >
                   Tomorrow
@@ -597,13 +782,15 @@ export default function CreateScreen() {
                 onPress={() => setVisibleMonth(monthStartForKey(selectedDate))}
                 style={[
                   styles.createDateQuickButton,
-                  activeQuickDate === "more" && styles.createDateQuickButtonActive,
+                  activeQuickDate === "more" &&
+                    styles.createDateQuickButtonActive,
                 ]}
               >
                 <Text
                   style={[
                     styles.createDateQuickButtonText,
-                    activeQuickDate === "more" && styles.createDateQuickButtonTextActive,
+                    activeQuickDate === "more" &&
+                      styles.createDateQuickButtonTextActive,
                   ]}
                 >
                   More
@@ -611,7 +798,9 @@ export default function CreateScreen() {
                 <MaterialCommunityIcons
                   name="chevron-down"
                   size={16}
-                  color={activeQuickDate === "more" ? colors.black : colors.silver}
+                  color={
+                    activeQuickDate === "more" ? colors.black : colors.silver
+                  }
                 />
               </Pressable>
             </View>
@@ -621,14 +810,22 @@ export default function CreateScreen() {
                 onPress={() => setVisibleMonth((month) => addMonths(month, -1))}
                 style={styles.createCalendarNavButton}
               >
-                <MaterialCommunityIcons name="chevron-left" size={22} color={colors.offwhite} />
+                <MaterialCommunityIcons
+                  name="chevron-left"
+                  size={22}
+                  color={colors.offwhite}
+                />
               </Pressable>
               <Text style={styles.createCalendarMonthText}>{monthLabel}</Text>
               <Pressable
                 onPress={() => setVisibleMonth((month) => addMonths(month, 1))}
                 style={styles.createCalendarNavButton}
               >
-                <MaterialCommunityIcons name="chevron-right" size={22} color={colors.offwhite} />
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={22}
+                  color={colors.offwhite}
+                />
               </Pressable>
             </View>
 
@@ -642,7 +839,10 @@ export default function CreateScreen() {
 
             <View style={styles.createCalendarGrid}>
               {calendarWeeks.map((week, weekIndex) => (
-                <View key={`week-${weekIndex}`} style={styles.createCalendarWeekDatesRow}>
+                <View
+                  key={`week-${weekIndex}`}
+                  style={styles.createCalendarWeekDatesRow}
+                >
                   {week.map((date) => {
                     const key = toDateKey(date);
                     const selected = selectedDate === key;
@@ -672,7 +872,8 @@ export default function CreateScreen() {
                             <View
                               style={[
                                 styles.createCalendarTodayDot,
-                                selected && styles.createCalendarTodayDotSelected,
+                                selected &&
+                                  styles.createCalendarTodayDotSelected,
                               ]}
                             />
                           ) : null}
@@ -688,11 +889,21 @@ export default function CreateScreen() {
               <View style={styles.createTimeFieldRow}>
                 <Text style={styles.createTimeFieldLabel}>Start time</Text>
                 <Pressable
-                  onPress={() => setOpenTimePicker((current) => (current === "start" ? null : "start"))}
+                  onPress={() =>
+                    setOpenTimePicker((current) =>
+                      current === "start" ? null : "start",
+                    )
+                  }
                   style={styles.createTimeField}
                 >
-                  <Text style={styles.createTimeFieldText}>{formatTimeOption(startTime)}</Text>
-                  <MaterialCommunityIcons name="chevron-down" size={19} color={colors.silver} />
+                  <Text style={styles.createTimeFieldText}>
+                    {formatTimeOption(startTime)}
+                  </Text>
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={19}
+                    color={colors.silver}
+                  />
                 </Pressable>
               </View>
               {openTimePicker === "start" ? (
@@ -714,7 +925,8 @@ export default function CreateScreen() {
                         <Text
                           style={[
                             styles.createTimeDropdownOptionText,
-                            selected && styles.createTimeDropdownOptionTextSelected,
+                            selected &&
+                              styles.createTimeDropdownOptionTextSelected,
                           ]}
                         >
                           {formatTimeOption(time)}
@@ -728,13 +940,21 @@ export default function CreateScreen() {
               <View style={styles.createTimeFieldRow}>
                 <Text style={styles.createTimeFieldLabel}>End time</Text>
                 <Pressable
-                  onPress={() => setOpenTimePicker((current) => (current === "end" ? null : "end"))}
+                  onPress={() =>
+                    setOpenTimePicker((current) =>
+                      current === "end" ? null : "end",
+                    )
+                  }
                   style={styles.createTimeField}
                 >
                   <Text style={styles.createTimeFieldText}>
                     {endTime ? formatTimeOption(endTime) : "No end"}
                   </Text>
-                  <MaterialCommunityIcons name="chevron-down" size={19} color={colors.silver} />
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={19}
+                    color={colors.silver}
+                  />
                 </Pressable>
               </View>
               {openTimePicker === "end" ? (
@@ -756,7 +976,8 @@ export default function CreateScreen() {
                         <Text
                           style={[
                             styles.createTimeDropdownOptionText,
-                            selected && styles.createTimeDropdownOptionTextSelected,
+                            selected &&
+                              styles.createTimeDropdownOptionTextSelected,
                           ]}
                         >
                           {time ? formatTimeOption(time) : "No end"}
