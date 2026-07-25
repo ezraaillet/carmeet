@@ -541,7 +541,7 @@ export default function EditProfileScreen() {
     return (
       <>
         {renderSectionHeader(
-          "Choose a section to update your CarMeet profile.",
+          "Choose a section to update your Cruizr profile.",
         )}
         <View style={s.settingsList}>
           {renderSectionRow(
@@ -750,7 +750,7 @@ export default function EditProfileScreen() {
           <View style={s.infoRow}>
             <Text style={s.label}>Profile visibility</Text>
             <Text style={s.placeholderText}>
-              Your CarMeet profile is visible through current app profile rules.
+              Your Cruizr profile is visible through current app profile rules.
             </Text>
           </View>
           <View style={s.infoRow}>
@@ -793,7 +793,7 @@ export default function EditProfileScreen() {
               : "No city or state is saved yet."}
           </Text>
           <Text style={[s.placeholderText, s.settingsHelperText]}>
-            Your saved location is managed by CarMeet location services; this
+            Your saved location is managed by Cruizr location services; this
             setting controls who can see it on the map and profile.
           </Text>
         </View>

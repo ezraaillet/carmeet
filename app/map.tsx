@@ -1993,7 +1993,7 @@ export default function MapScreen() {
     selectedProfile?.display_name ||
     selectedProfile?.username ||
     selectedProfile?.id?.slice(0, 8) ||
-    "CarMeet user";
+    "Cruizr user";
 
   const initials = (
     selectedProfile?.display_name ||

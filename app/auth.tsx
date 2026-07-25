@@ -118,7 +118,7 @@ export default function AuthScreen() {
         <Text style={styles.authTitle}>{isSignUp ? "Create account" : "Sign in"}</Text>
         <Text style={styles.authSubtitle}>
           {isSignUp
-            ? "Create your CarMeet account to use the map, create meets, and build your profile."
+            ? "Create your Cruizr account to use the map, create meets, and build your profile."
             : "Sign in to get back to the map, your profile, and your meets."}
         </Text>
 

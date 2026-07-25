@@ -198,7 +198,7 @@ function RootLayoutInner() {
     <View style={{ flex: 1, backgroundColor: colors.black }}>
       {/* Header stays on top */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>CarMeet</Text>
+        <Text style={styles.headerTitle}>Cruizr</Text>
 
         {authedEmail && (
           <Pressable
