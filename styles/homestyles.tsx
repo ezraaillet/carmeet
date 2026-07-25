@@ -35,6 +35,46 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 1,
   },
+  startupOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9999,
+    elevation: 9999,
+    backgroundColor: colors.black,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  startupAnimationStage: {
+    width: "100%",
+    height: 116,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  startupRoadLine: {
+    position: "absolute",
+    left: 40,
+    right: 40,
+    bottom: 26,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: colors.gunmetal,
+  },
+  startupCar: {
+    width: 96,
+    height: 76,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOpacity: 0.36,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  startupWordmark: {
+    marginTop: 6,
+    color: colors.primary,
+    fontSize: 36,
+    fontWeight: "900",
+  },
 
   // Header
   header: {

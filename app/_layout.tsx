@@ -1,10 +1,10 @@
 import { MapDataProvider, useMapData } from "@/components/MapDataProvider";
-import { UserAccountProvider } from "@/components/UserAccountProvider";
-import { Pressable, Text, View } from "react-native";
+import { UserAccountProvider, useUserAccount } from "@/components/UserAccountProvider";
+import { Animated, Easing, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { Tabs, router } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import NotificationsOverlay from "../components/NotificationsOverlay";
 import { colors } from "../styles/themes";
 import styles from "../styles/homestyles";
@@ -19,10 +19,113 @@ export type FriendRequest = {
   created_at: string;
 };
 
+function StartupSplash() {
+  const { width } = useWindowDimensions();
+  const carProgress = useRef(new Animated.Value(0)).current;
+  const titleOpacity = useRef(new Animated.Value(0)).current;
+  const titleTranslateY = useRef(new Animated.Value(8)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(carProgress, {
+            toValue: 1,
+            duration: 1350,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.sequence([
+            Animated.delay(620),
+            Animated.parallel([
+              Animated.timing(titleOpacity, {
+                toValue: 1,
+                duration: 360,
+                easing: Easing.out(Easing.quad),
+                useNativeDriver: true,
+              }),
+              Animated.timing(titleTranslateY, {
+                toValue: 0,
+                duration: 360,
+                easing: Easing.out(Easing.quad),
+                useNativeDriver: true,
+              }),
+            ]),
+          ]),
+        ]),
+        Animated.delay(620),
+        Animated.parallel([
+          Animated.timing(titleOpacity, {
+            toValue: 0,
+            duration: 180,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(titleTranslateY, {
+            toValue: 8,
+            duration: 180,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.timing(carProgress, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [carProgress, titleOpacity, titleTranslateY]);
+
+  const carTranslateX = carProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-width * 0.58, width * 0.58],
+  });
+
+  return (
+    <View style={styles.startupOverlay}>
+      <View style={styles.startupAnimationStage}>
+        <View style={styles.startupRoadLine} />
+        <Animated.View
+          style={[
+            styles.startupCar,
+            { transform: [{ translateX: carTranslateX }] },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="car-sports"
+            size={70}
+            color={colors.primary}
+          />
+        </Animated.View>
+      </View>
+      <Animated.Text
+        style={[
+          styles.startupWordmark,
+          {
+            opacity: titleOpacity,
+            transform: [{ translateY: titleTranslateY }],
+          },
+        ]}
+      >
+        Cruizr
+      </Animated.Text>
+    </View>
+  );
+}
 function RootLayoutInner() {
   const { refresh } = useMapData();
+  const { hydrated: accountHydrated } = useUserAccount();
 
 
+  const [authChecked, setAuthChecked] = useState(false);
+  const [initialAppReady, setInitialAppReady] = useState(false);
   const [authedEmail, setAuthedEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -56,16 +159,24 @@ function RootLayoutInner() {
         await ensureProfileAndMembership(user.id, user.email ?? null);
       }
 
+      setAuthChecked(true);
+
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       const user = session?.user ?? null;
-      setAuthedEmail(user?.email ?? null);
-      setUserId(user?.id ?? null);
+      setInitialAppReady(false);
 
-      if (user?.id) {
-        void ensureProfileAndMembership(user.id, user.email ?? null);
-      }
+      void (async () => {
+        setAuthedEmail(user?.email ?? null);
+        setUserId(user?.id ?? null);
+
+        if (user?.id) {
+          await ensureProfileAndMembership(user.id, user.email ?? null);
+        }
+
+        setAuthChecked(true);
+      })();
 
     });
 
@@ -103,24 +214,34 @@ function RootLayoutInner() {
     setNotifLoading(false);
   }, [userId]);
 
-  // Bootstrap map data + pending requests whenever user changes
+  // Bootstrap account, map data, meets, profiles, and pending requests before showing the app.
   useEffect(() => {
-    if (!userId) {
-      setPendingRequests([]);
-      setPendingCount(0);
-      setNotifOpen(false);
-      // Clear user-scoped map/profile caches on logout.
-      // @ts-ignore
-      void refresh(null);
-      return;
+    let cancelled = false;
+
+    async function bootstrapInitialAppData() {
+      if (!authChecked || !accountHydrated) return;
+
+      setInitialAppReady(false);
+
+      if (!userId) {
+        setPendingRequests([]);
+        setPendingCount(0);
+        setNotifOpen(false);
+        await refresh(null);
+        if (!cancelled) setInitialAppReady(true);
+        return;
+      }
+
+      await Promise.all([fetchPendingRequests(), refresh(userId)]);
+      if (!cancelled) setInitialAppReady(true);
     }
 
-    fetchPendingRequests();
+    void bootstrapInitialAppData();
 
-    // preload friends + nearby + profiles
-    // @ts-ignore
-    refresh(userId);
-  }, [userId, fetchPendingRequests, refresh]);
+    return () => {
+      cancelled = true;
+    };
+  }, [accountHydrated, authChecked, userId, fetchPendingRequests, refresh]);
 
   // Realtime updates for friend requests
   useEffect(() => {
@@ -298,6 +419,8 @@ function RootLayoutInner() {
           onRespond={handleRespond}
         />
       </View>
+
+      {!initialAppReady ? <StartupSplash /> : null}
     </View>
   );
 }
