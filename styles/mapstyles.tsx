@@ -367,6 +367,8 @@ const mapStyles = StyleSheet.create({
     width: 54,
     height: 64,
     alignItems: "center",
+    justifyContent: "flex-start",
+    overflow: "visible",
   },
   userPinAvatarRing: {
     width: 48,
@@ -397,8 +399,7 @@ const mapStyles = StyleSheet.create({
     fontWeight: "800",
   },
   userPinTail: {
-    position: "absolute",
-    top: 40,
+    marginTop: -4,
     width: 0,
     height: 0,
     borderLeftWidth: 9,

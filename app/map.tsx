@@ -220,7 +220,6 @@ const UserPinAvatar = React.memo(function UserPinAvatar({
 }) {
   return (
     <View style={[styles.userPinMarker, { opacity: fresh ? 1 : 0.45 }]}>
-      <View style={[styles.userPinTail, { borderTopColor: borderColor }]} />
       <View style={[styles.userPinAvatarRing, { borderColor }]}>
         {uri ? (
           <Image source={{ uri }} style={styles.userPinAvatarImage} />
@@ -230,6 +229,7 @@ const UserPinAvatar = React.memo(function UserPinAvatar({
           </View>
         )}
       </View>
+      <View style={[styles.userPinTail, { borderTopColor: borderColor }]} />
     </View>
   );
 });
