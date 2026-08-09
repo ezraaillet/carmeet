@@ -312,6 +312,13 @@ export default function ProfileScreen() {
     void loadGoingMeets();
   }, [activeTab, loadGoingMeets]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (activeTab !== "meets") return;
+      void loadGoingMeets();
+    }, [activeTab, loadGoingMeets])
+  );
+
   const loadMembership = useCallback(async () => {
     if (!myUserId) {
       setMembership(null);

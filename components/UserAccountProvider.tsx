@@ -1,8 +1,8 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { supabase } from "@/database/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ensureProfileAndMembershipExists } from "@/utils/profileReadiness";
+import { supabase } from "@/database/supabase";
 
 type MembershipPlan = "free" | "premium";
 type MembershipStatus = "active" | "inactive" | "cancelled" | "past_due" | "trialing";

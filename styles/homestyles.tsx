@@ -179,14 +179,50 @@ const styles = StyleSheet.create({
   },
   notifItemRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 8,
+    alignItems: "center",
+    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.gunmetal,
+    gap: 10,
+  },
+  notifRequesterButton: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  notifAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.gunmetal,
+  },
+  notifAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.gunmetal,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notifAvatarInitials: {
+    color: colors.offwhite,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  notifItemContent: {
+    flex: 1,
+    minWidth: 0,
   },
   notifItemText: {
     color: colors.offwhite,
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: "800",
     marginBottom: 2,
   },
   notifItemHighlight: {
@@ -199,9 +235,8 @@ const styles = StyleSheet.create({
   },
 
   notifButtonsRow: {
-    marginLeft: 8,
     flexDirection: "column",
-    gap: 4,
+    gap: 5,
   },
   notifAcceptBtn: {
     backgroundColor: colors.primary,

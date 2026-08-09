@@ -11,12 +11,20 @@ import styles from "../styles/homestyles";
 import { supabase } from "../database/supabase";
 import { ensureProfileAndMembershipExists } from "@/utils/profileReadiness";
 
+export type FriendRequestProfile = {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  photo_url: string | null;
+};
+
 export type FriendRequest = {
   id: string;
   from_user_id: string;
   to_user_id: string;
   status: string;
   created_at: string;
+  requester_profile?: FriendRequestProfile | null;
 };
 
 function StartupSplash() {
@@ -207,8 +215,36 @@ function RootLayoutInner() {
       setPendingCount(0);
     } else {
       const list = (data ?? []) as FriendRequest[];
-      setPendingRequests(list);
-      setPendingCount(list.length);
+      const requesterIds = Array.from(
+        new Set(list.map((request) => request.from_user_id).filter(Boolean)),
+      );
+      let profilesByRequesterId: Record<string, FriendRequestProfile> = {};
+
+      if (requesterIds.length > 0) {
+        const { data: profileRows, error: profileError } = await supabase
+          .from("profiles")
+          .select("id, username, display_name, photo_url")
+          .in("id", requesterIds);
+
+        if (profileError) {
+          setNotifError(profileError.message);
+        } else {
+          profilesByRequesterId = ((profileRows ?? []) as FriendRequestProfile[]).reduce<
+            Record<string, FriendRequestProfile>
+          >((acc, profile) => {
+            acc[profile.id] = profile;
+            return acc;
+          }, {});
+        }
+      }
+
+      const enrichedList = list.map((request) => ({
+        ...request,
+        requester_profile: profilesByRequesterId[request.from_user_id] ?? null,
+      }));
+
+      setPendingRequests(enrichedList);
+      setPendingCount(enrichedList.length);
     }
 
     setNotifLoading(false);
@@ -279,6 +315,15 @@ function RootLayoutInner() {
   function closeNotifications() {
     setNotifOpen(false);
     setNotifError(null);
+  }
+
+  function openRequesterProfile(requesterId: string) {
+    setNotifOpen(false);
+    setNotifError(null);
+    router.navigate({
+      pathname: "/map",
+      params: { focusUserId: requesterId },
+    });
   }
 
   async function handleRespond(
@@ -417,6 +462,7 @@ function RootLayoutInner() {
           error={notifError}
           actionLoadingId={actionLoadingId}
           onRespond={handleRespond}
+          onOpenProfile={openRequesterProfile}
         />
       </View>
 

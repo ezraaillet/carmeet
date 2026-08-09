@@ -512,6 +512,7 @@ export default function MapScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     focusMeetId?: string;
+    focusUserId?: string;
     latitude?: string;
     longitude?: string;
   }>();
@@ -851,6 +852,8 @@ export default function MapScreen() {
               timeInterval: 3000,
             },
             async ({ coords }) => {
+              if (cancelled) return;
+
               if (myUserId) {
                 setMyLiveLocation({
                   user_id: myUserId,
@@ -1374,10 +1377,15 @@ export default function MapScreen() {
       }
 
       if (Platform.OS === "android") {
-        markerRefs.current[userId]?.animateMarkerToCoordinate(
-          nextCoordinate,
-          MARKER_ANIMATION_DURATION_MS,
-        );
+        try {
+          markerRefs.current[userId]?.animateMarkerToCoordinate(
+            nextCoordinate,
+            MARKER_ANIMATION_DURATION_MS,
+          );
+        } catch (error: any) {
+          delete markerRefs.current[userId];
+          console.warn("Marker animation skipped:", error?.message ?? error);
+        }
         return;
       }
 
@@ -1590,15 +1598,22 @@ export default function MapScreen() {
 
       try {
         setMeetAttendanceSavingStatus(status);
-        const { error } = await supabase.from("meet_attendees").upsert(
-          {
-            meet_id: selectedMeet.id,
-            user_id: effectiveMyUserId,
-            status,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "meet_id,user_id" },
-        );
+        const isUnselecting = selectedMeetAttendanceStatus === status;
+        const { error } = isUnselecting
+          ? await supabase
+              .from("meet_attendees")
+              .delete()
+              .eq("meet_id", selectedMeet.id)
+              .eq("user_id", effectiveMyUserId)
+          : await supabase.from("meet_attendees").upsert(
+              {
+                meet_id: selectedMeet.id,
+                user_id: effectiveMyUserId,
+                status,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "meet_id,user_id" },
+            );
 
         if (error) {
           Alert.alert("Could not update meet", error.message);
@@ -1610,7 +1625,13 @@ export default function MapScreen() {
         setMeetAttendanceSavingStatus(null);
       }
     },
-    [effectiveMyUserId, meetAttendanceSavingStatus, refreshMeets, selectedMeet],
+    [
+      effectiveMyUserId,
+      meetAttendanceSavingStatus,
+      refreshMeets,
+      selectedMeet,
+      selectedMeetAttendanceStatus,
+    ],
   );
 
   function renderSelectedMeetDetails() {
@@ -1828,6 +1849,14 @@ export default function MapScreen() {
     },
     [myUserId, profilesById],
   );
+
+  useEffect(() => {
+    const focusUserId = params.focusUserId;
+    if (typeof focusUserId !== "string" || focusUserId.length === 0) return;
+    if (focusUserId === selectedUserIdRef.current) return;
+
+    void handleMarkerPress(focusUserId);
+  }, [handleMarkerPress, params.focusUserId]);
 
   const closeProfileCard = () => {
     setSelectedUserId(null);
