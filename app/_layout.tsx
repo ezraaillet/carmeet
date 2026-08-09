@@ -452,6 +452,10 @@ function RootLayoutInner() {
             name="edit-profile"
             options={{ href: null, title: "Edit Profile" }}
           />
+          <Tabs.Screen
+            name="edit-meet"
+            options={{ href: null, title: "Edit Meet" }}
+          />
         </Tabs>
 
         <NotificationsOverlay

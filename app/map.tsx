@@ -582,6 +582,9 @@ export default function MapScreen() {
   const [meetAttendanceSavingStatus, setMeetAttendanceSavingStatus] = useState<
     string | null
   >(null);
+  const [meetOwnerActionLoading, setMeetOwnerActionLoading] = useState<
+    "cancel" | "delete" | null
+  >(null);
   const [meetSearchQuery, setMeetSearchQuery] = useState("");
   const [showMeetPins, setShowMeetPins] = useState(true);
   const [clusterMarkerRedrawVersion, setClusterMarkerRedrawVersion] =
@@ -1434,6 +1437,9 @@ export default function MapScreen() {
         interested: 0,
       })
     : { going: 0, interested: 0 };
+  const isSelectedMeetOwner = Boolean(
+    selectedMeet && effectiveMyUserId && selectedMeet.created_by === effectiveMyUserId,
+  );
   const filteredMeetMarkers = useMemo(() => {
     const normalized = meetSearchQuery.trim().toLowerCase();
     if (!normalized) return meetMarkers;
@@ -1591,6 +1597,79 @@ export default function MapScreen() {
     await ExpoLinking.openURL(directionsUrl);
   }, [selectedMeet, selectedMeetHasCoordinates]);
 
+  const openEditSelectedMeet = useCallback(() => {
+    if (!selectedMeet || !isSelectedMeetOwner) return;
+    router.push({ pathname: "/edit-meet", params: { meetId: selectedMeet.id } });
+  }, [isSelectedMeetOwner, router, selectedMeet]);
+
+  const cancelSelectedMeet = useCallback(() => {
+    if (!selectedMeet || !effectiveMyUserId || !isSelectedMeetOwner) return;
+
+    Alert.alert(
+      "Cancel meet?",
+      "This keeps the meet visible but marks it as cancelled.",
+      [
+        { text: "Never mind", style: "cancel" },
+        {
+          text: "Cancel Meet",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setMeetOwnerActionLoading("cancel");
+              const { error } = await supabase
+                .from("meets")
+                .update({ status: "cancelled" })
+                .eq("id", selectedMeet.id)
+                .eq("created_by", effectiveMyUserId);
+
+              if (error) {
+                Alert.alert("Could not cancel meet", error.message);
+              } else {
+                await refreshMeets(effectiveMyUserId);
+              }
+
+              setMeetOwnerActionLoading(null);
+            })();
+          },
+        },
+      ],
+    );
+  }, [effectiveMyUserId, isSelectedMeetOwner, refreshMeets, selectedMeet]);
+
+  const deleteSelectedMeet = useCallback(() => {
+    if (!selectedMeet || !effectiveMyUserId || !isSelectedMeetOwner) return;
+
+    Alert.alert(
+      "Delete meet?",
+      "This removes the meet and its Going/Interested list. This cannot be undone.",
+      [
+        { text: "Never mind", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setMeetOwnerActionLoading("delete");
+              const { error } = await supabase
+                .from("meets")
+                .delete()
+                .eq("id", selectedMeet.id)
+                .eq("created_by", effectiveMyUserId);
+
+              if (error) {
+                Alert.alert("Could not delete meet", error.message);
+              } else {
+                setSelectedMeetId(null);
+                await refreshMeets(effectiveMyUserId);
+              }
+
+              setMeetOwnerActionLoading(null);
+            })();
+          },
+        },
+      ],
+    );
+  }, [effectiveMyUserId, isSelectedMeetOwner, refreshMeets, selectedMeet]);
   const updateSelectedMeetAttendance = useCallback(
     async (status: "going" | "interested") => {
       if (!selectedMeet || !effectiveMyUserId || meetAttendanceSavingStatus)
@@ -1745,6 +1824,59 @@ export default function MapScreen() {
           <Text style={styles.meetDetailDescription} numberOfLines={3}>
             {selectedMeet.description}
           </Text>
+        ) : null}
+
+        {isSelectedMeetOwner ? (
+          <View style={styles.meetOwnerPanel}>
+            <Text style={styles.meetOwnerLabel}>Host controls</Text>
+            <View style={styles.meetOwnerActionsRow}>
+              <Pressable
+                onPress={openEditSelectedMeet}
+                style={styles.meetOwnerEditButton}
+              >
+                <MaterialCommunityIcons name="pencil" size={16} color="#111" />
+                <Text style={styles.meetOwnerEditButtonText}>Edit</Text>
+              </Pressable>
+              <Pressable
+                onPress={cancelSelectedMeet}
+                disabled={Boolean(meetOwnerActionLoading)}
+                style={styles.meetOwnerSecondaryButton}
+              >
+                {meetOwnerActionLoading === "cancel" ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="calendar-remove"
+                      size={16}
+                      color="#fff"
+                    />
+                    <Text style={styles.meetOwnerSecondaryButtonText}>
+                      Cancel
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={deleteSelectedMeet}
+                disabled={Boolean(meetOwnerActionLoading)}
+                style={styles.meetOwnerDangerButton}
+              >
+                {meetOwnerActionLoading === "delete" ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="trash-can-outline"
+                      size={16}
+                      color="#fff"
+                    />
+                    <Text style={styles.meetOwnerDangerButtonText}>Delete</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </View>
         ) : null}
 
         <View style={styles.meetDetailActionRow}>
