@@ -441,7 +441,7 @@ export default function EditMeetScreen() {
 
     if (
       parsedEnd &&
-      new Date(parsedEnd).getTime() < new Date(parsedStart).getTime()
+      new Date(parsedEnd).getTime() <= new Date(parsedStart).getTime()
     ) {
       setError("End time must be after the start time.");
       return;

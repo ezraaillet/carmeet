@@ -188,32 +188,17 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const fetchNearbyUserIds = useCallback(
+  const fetchNearbyPublicLocations = useCallback(
     async (myLat: number, myLng: number, radiusMeters = PUBLIC_DISCOVERY_RADIUS_METERS) => {
-      const deltaLat = radiusMeters / 111_111;
-      const deltaLng =
-        radiusMeters / (111_111 * Math.cos((myLat * Math.PI) / 180));
-
-      const minLat = myLat - deltaLat;
-      const maxLat = myLat + deltaLat;
-      const minLng = myLng - deltaLng;
-      const maxLng = myLng + deltaLng;
-
-      const { data, error } = await supabase
-        .from("locations")
-        .select("user_id, lat, lng")
-        .gte("lat", minLat)
-        .lte("lat", maxLat)
-        .gte("lng", minLng)
-        .lte("lng", maxLng);
+      const { data, error } = await supabase.rpc("get_nearby_public_locations", {
+        p_lat: myLat,
+        p_lng: myLng,
+        p_radius_m: radiusMeters,
+      });
 
       if (error) throw error;
 
-      return (data ?? [])
-        .filter(
-          (r) => metersBetween(myLat, myLng, r.lat, r.lng) <= radiusMeters
-        )
-        .map((r) => r.user_id);
+      return (data ?? []) as LiveLoc[];
     },
     []
   );
@@ -303,22 +288,39 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(
     async (uidOverride?: string | null) => {
       const requestId = ++refreshSeqRef.current;
-      const loadForIds = async (idsToLoad: string[]) => {
-        if (!idsToLoad.length) return;
+        const loadForIds = async (
+          idsToLoad: string[],
+          options: { loadLocations?: boolean } = {},
+        ) => {
+          if (!idsToLoad.length) return;
 
-        const uniq = Array.from(new Set(idsToLoad));
+          const uniq = Array.from(new Set(idsToLoad));
+          const loadLocations = options.loadLocations ?? true;
 
-        const { data: locRows, error: locErr } = await supabase
-          .from("locations")
-          .select("*")
-          .in("user_id", uniq);
+          let locRows: LiveLoc[] = [];
+          if (loadLocations) {
+            const { data, error: locErr } = await supabase
+              .from("locations")
+              .select("*")
+              .in("user_id", uniq);
 
-        if (locErr) throw locErr;
+            if (locErr) throw locErr;
+            locRows = (data ?? []) as LiveLoc[];
+          }
+
         if (refreshSeqRef.current !== requestId) return;
 
         const locMap: Record<string, LiveLoc> = {};
-        (locRows ?? []).forEach((l: any) => (locMap[l.user_id] = l as LiveLoc));
-        setLocationsById((prev) => ({ ...prev, ...locMap }));
+        locRows.forEach((l) => (locMap[l.user_id] = l));
+        if (loadLocations) {
+          setLocationsById((prev) => {
+            const next = { ...prev };
+            uniq.forEach((id) => {
+              if (!locMap[id]) delete next[id];
+            });
+            return { ...next, ...locMap };
+          });
+        }
         const activeUid = currentUserIdRef.current;
         if (activeUid && locMap[activeUid]) {
           currentUserLocationRef.current = locMap[activeUid];
@@ -475,14 +477,27 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         setIds(baseIds);
 
         const loadNearbyPublicUsers = async (lat: number, lng: number) => {
-          const nearbyIds = await fetchNearbyUserIds(lat, lng, PUBLIC_DISCOVERY_RADIUS_METERS);
+          const nearbyLocations = await fetchNearbyPublicLocations(
+            lat,
+            lng,
+            PUBLIC_DISCOVERY_RADIUS_METERS,
+          );
           if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
 
+          const nearbyIds = nearbyLocations.map((location) => location.user_id);
           const combined = Array.from(new Set([...baseIds, ...nearbyIds]));
           setIds(combined);
 
+          setLocationsById((previous) => {
+            const next = { ...previous };
+            nearbyLocations.forEach((location) => {
+              next[location.user_id] = location;
+            });
+            return next;
+          });
+
           const missing = combined.filter((id) => !baseIdSet.has(id));
-          await loadForIds(missing);
+          await loadForIds(missing, { loadLocations: false });
         };
 
         await Promise.all([loadForIds(baseIds), fetchMeets(uid)]);
@@ -649,7 +664,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     },
-    [fetchFriendIds, fetchMeets, fetchNearbyUserIds]
+    [fetchFriendIds, fetchMeets, fetchNearbyPublicLocations]
   );
 
   const refreshMeets = useCallback(

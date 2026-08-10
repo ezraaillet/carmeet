@@ -116,10 +116,23 @@ Observed app-facing fields:
 - `user_id`
 - `accent_color`
 
+### `push_tokens`
+
+Stores one or more Expo push tokens per user/device for remote notifications.
+
+### `notification_events`
+
+Server-managed queue of friend and meet events waiting for Expo push delivery.
+
 ## RPCs Used By App Code
 
 - `accept_friend_request(p_request_id)`
 - `reject_friend_request(p_request_id)`
+- `get_nearby_public_locations(p_lat, p_lng, p_radius_m)`
+- `set_meet_attendance(p_meet_id, p_status)`
+- `can_access_meet(p_meet_id)`
+- `can_view_friend_location(p_user_id)`
+- `enqueue_notification(...)` (trigger-only)
 
 ## Storage Buckets Used By App Code
 
@@ -144,6 +157,10 @@ Known upload paths include:
 - `meets`
 - `meet_attendees`
 - `friend_requests`
+
+The app only receives nearby public locations through
+`get_nearby_public_locations`; direct location reads are limited to the signed-in
+user and accepted friends with a fresh location.
 
 ## Baseline
 

@@ -18,6 +18,12 @@ import type { ComponentProps } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "@/styles/themes";
 import { ensureMinimalProfileExists } from "@/utils/profileReadiness";
+import {
+  getLocationTrackingMode,
+  setLocationTrackingMode,
+  type LocationTrackingMode,
+} from "@/features/location/locationTracking";
+import { removePushTokenForUser } from "@/features/notifications/pushNotifications";
 import { router } from "expo-router";
 import s from "@/styles/profilestyles";
 import { supabase } from "../database/supabase";
@@ -87,6 +93,8 @@ export default function EditProfileScreen() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [locationVis, setLocationVis] = useState("everyone");
+  const [locationTrackingMode, setLocationTrackingModeState] =
+    useState<LocationTrackingMode>("while_using");
   const [bio, setBio] = useState("");
   const [instagramHandle, setInstagramHandle] = useState("");
   const [tiktokHandle, setTiktokHandle] = useState("");
@@ -158,6 +166,10 @@ export default function EditProfileScreen() {
       mounted = false;
       sub.subscription.unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    void getLocationTrackingMode().then(setLocationTrackingModeState);
   }, []);
 
   useEffect(() => {
@@ -345,6 +357,7 @@ export default function EditProfileScreen() {
 
   function cancelSectionEditing() {
     if (profile) hydrateProfile(profile);
+    void getLocationTrackingMode().then(setLocationTrackingModeState);
     setActiveSection("main");
   }
 
@@ -353,6 +366,20 @@ export default function EditProfileScreen() {
 
     setSaving(true);
     setError(null);
+
+    if (activeSection === "privacy") {
+      const trackingResult = await setLocationTrackingMode(
+        locationTrackingMode,
+      );
+      setLocationTrackingModeState(trackingResult.mode);
+      if (trackingResult.denied) {
+        setError(
+          "Always tracking was not enabled. Allow background location in iPhone Settings, or keep While using.",
+        );
+        setSaving(false);
+        return;
+      }
+    }
 
     const payload = {
       username: username.trim() || null,
@@ -418,6 +445,8 @@ export default function EditProfileScreen() {
 
   async function handleSignOut() {
     setSigningOut(true);
+    if (myUserId) await removePushTokenForUser(myUserId);
+    await setLocationTrackingMode("while_using");
     const { error: signOutErr } = await supabase.auth.signOut();
     setSigningOut(false);
 
@@ -763,7 +792,7 @@ export default function EditProfileScreen() {
           <View style={s.field}>
             <Text style={s.label}>Location visibility</Text>
             <View style={s.locationRow}>
-              {["everyone", "friends", "nobody"].map((val) => {
+              {["everyone", "friends", "none"].map((val) => {
                 const selected = locationVis === val;
                 return (
                   <Pressable
@@ -780,12 +809,44 @@ export default function EditProfileScreen() {
                         selected && s.locationOptionTextSelected,
                       ]}
                     >
-                      {val}
+                      {val === "none" ? "nobody" : val}
                     </Text>
                   </Pressable>
                 );
               })}
             </View>
+          </View>
+          <View style={s.field}>
+            <Text style={s.label}>Location tracking</Text>
+            <View style={s.locationRow}>
+              {(["while_using", "always"] as const).map((mode) => {
+                const selected = locationTrackingMode === mode;
+                return (
+                  <Pressable
+                    key={mode}
+                    onPress={() => setLocationTrackingModeState(mode)}
+                    style={[
+                      s.locationOption,
+                      selected && s.locationOptionSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        s.locationOptionText,
+                        selected && s.locationOptionTextSelected,
+                      ]}
+                    >
+                      {mode === "while_using" ? "while using" : "always"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={[s.placeholderText, s.settingsHelperText]}>
+              Always tracking lets friends see your fresh location while Cruizr
+              is closed. iOS may show a location indicator and you can change
+              this anytime in iPhone Settings.
+            </Text>
           </View>
           <Text style={s.placeholderText}>
             {hasLocation

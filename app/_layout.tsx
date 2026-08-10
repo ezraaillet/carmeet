@@ -1,6 +1,7 @@
 import { MapDataProvider, useMapData } from "@/components/MapDataProvider";
 import { UserAccountProvider, useUserAccount } from "@/components/UserAccountProvider";
 import { Animated, Easing, Pressable, Text, View, useWindowDimensions } from "react-native";
+import * as Notifications from "expo-notifications";
 import { Tabs, router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -10,6 +11,10 @@ import { colors } from "../styles/themes";
 import styles from "../styles/homestyles";
 import { supabase } from "../database/supabase";
 import { ensureProfileAndMembershipExists } from "@/utils/profileReadiness";
+import "@/features/location/locationTracking";
+import {
+  registerForPushNotifications,
+} from "@/features/notifications/pushNotifications";
 
 export type FriendRequestProfile = {
   id: string;
@@ -249,6 +254,44 @@ function RootLayoutInner() {
 
     setNotifLoading(false);
   }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    void registerForPushNotifications(userId).catch((error: any) => {
+      console.warn(
+        "Push notification registration failed:",
+        error?.message ?? error,
+      );
+    });
+  }, [userId]);
+
+  useEffect(() => {
+    const responseSubscription =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const data = response.notification.request.content.data as {
+          meet_id?: string;
+          user_id?: string;
+        };
+
+        if (data.meet_id) {
+          router.navigate({
+            pathname: "/map",
+            params: { focusMeetId: data.meet_id },
+          });
+        } else if (data.user_id) {
+          router.navigate({
+            pathname: "/map",
+            params: { focusUserId: data.user_id },
+          });
+        } else {
+          setNotifOpen(true);
+          void fetchPendingRequests();
+        }
+      });
+
+    return () => responseSubscription.remove();
+  }, [fetchPendingRequests]);
 
   // Bootstrap account, map data, meets, profiles, and pending requests before showing the app.
   useEffect(() => {

@@ -56,9 +56,14 @@ import {
 import {
   fetchUserMarkerCardData,
   getCurrentAuthUser,
+  deleteMyLocation,
   insertFriendRequest,
   upsertLocation,
 } from "@/features/map/mapService";
+import {
+  getLocationTrackingMode,
+  setLocationTrackingMode,
+} from "@/features/location/locationTracking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -709,16 +714,21 @@ export default function MapScreen() {
 
   useEffect(() => {
     (async () => {
+      if (!authed) return;
+
       const fg = await Location.requestForegroundPermissionsAsync();
       if (fg.status !== "granted") {
         setHasPermission(false);
         return;
       }
 
-      await Location.requestBackgroundPermissionsAsync();
+      if ((await getLocationTrackingMode()) === "always") {
+        await setLocationTrackingMode("always");
+      }
+
       setHasPermission(true);
     })();
-  }, []);
+  }, [authed]);
 
   const upsertMyLocation = useCallback(
     async (lat: number, lng: number, heading?: number, speed?: number) => {
@@ -917,6 +927,9 @@ export default function MapScreen() {
       return () => {
         cancelled = true;
         sub?.remove();
+        if (myUserId) {
+          void deleteMyLocation(myUserId);
+        }
       };
     }, [
       hasPermission,
@@ -1852,21 +1865,10 @@ export default function MapScreen() {
       try {
         setMeetAttendanceSavingStatus(status);
         const isUnselecting = selectedMeetAttendanceStatus === status;
-        const { error } = isUnselecting
-          ? await supabase
-              .from("meet_attendees")
-              .delete()
-              .eq("meet_id", selectedMeet.id)
-              .eq("user_id", effectiveMyUserId)
-          : await supabase.from("meet_attendees").upsert(
-              {
-                meet_id: selectedMeet.id,
-                user_id: effectiveMyUserId,
-                status,
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: "meet_id,user_id" },
-            );
+        const { error } = await supabase.rpc("set_meet_attendance", {
+          p_meet_id: selectedMeet.id,
+          p_status: isUnselecting ? null : status,
+        });
 
         if (error) {
           Alert.alert("Could not update meet", error.message);
@@ -1903,7 +1905,7 @@ export default function MapScreen() {
               {selectedMeet.title || "Meet"}
             </Text>
             <Text style={styles.meetDetailMeta}>
-              0 Friends • {selectedMeetAttendanceSummary.going} Going •{" "}
+              {selectedMeetAttendanceSummary.going + selectedMeetAttendanceSummary.interested} Attendees •{" "}
               {selectedMeetAttendanceSummary.interested} Interested
             </Text>
           </View>

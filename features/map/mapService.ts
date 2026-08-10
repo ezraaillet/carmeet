@@ -25,6 +25,10 @@ export async function upsertLocation(args: {
   });
 }
 
+export async function deleteMyLocation(userId: string) {
+  return supabase.from("locations").delete().eq("user_id", userId);
+}
+
 export async function fetchUserMarkerCardData(userId: string, myUserId: string | null) {
   return Promise.all([
     supabase

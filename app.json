@@ -54,11 +54,12 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Cruizr needs your location to show you on the map even when the app is closed.",
-          "locationWhenInUsePermission": "Cruizr needs your location to show you on the map."
+          "locationWhenInUsePermission": "Cruizr needs your location to show you on the map.",
+          "locationAlwaysAndWhenInUsePermission": "Cruizr uses your location to keep your friends updated when you choose Always tracking."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

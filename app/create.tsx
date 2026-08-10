@@ -376,6 +376,14 @@ export default function CreateScreen() {
       return;
     }
 
+    if (
+      parsedEnd &&
+      new Date(parsedEnd).getTime() <= new Date(parsedStart).getTime()
+    ) {
+      setError("End time must be after the start time.");
+      return;
+    }
+
     if (parsedMax !== null && (!Number.isFinite(parsedMax) || parsedMax <= 0)) {
       setError("Max attendees must be a positive number.");
       return;
