@@ -1,11 +1,23 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ensureProfileAndMembershipExists } from "@/utils/profileReadiness";
 import { supabase } from "@/database/supabase";
 
 type MembershipPlan = "free" | "premium";
-type MembershipStatus = "active" | "inactive" | "cancelled" | "past_due" | "trialing";
+type MembershipStatus =
+  | "active"
+  | "inactive"
+  | "cancelled"
+  | "past_due"
+  | "trialing";
 
 type CachedUserAccount = {
   userId: string;
@@ -21,22 +33,29 @@ type UserAccountContextValue = {
   hydrated: boolean;
   refreshing: boolean;
   isPremium: boolean;
-  refreshAccount: (uidOverride?: string | null, emailOverride?: string | null) => Promise<CachedUserAccount | null>;
+  refreshAccount: (
+    uidOverride?: string | null,
+    emailOverride?: string | null,
+  ) => Promise<CachedUserAccount | null>;
 };
 
 const ACCOUNT_CACHE_KEY = "carmeet:user-account:v1";
 
 const UserAccountContext = createContext<UserAccountContextValue | null>(null);
 
-function normalizeCachedAccount(value: string | null): CachedUserAccount | null {
+function normalizeCachedAccount(
+  value: string | null,
+): CachedUserAccount | null {
   if (!value) return null;
 
   try {
     const parsed = JSON.parse(value) as Partial<CachedUserAccount>;
     if (!parsed.userId) return null;
 
-    const membershipPlan = parsed.membershipPlan === "premium" ? "premium" : "free";
-    const membershipStatus = (parsed.membershipStatus ?? "inactive") as MembershipStatus;
+    const membershipPlan =
+      parsed.membershipPlan === "premium" ? "premium" : "free";
+    const membershipStatus = (parsed.membershipStatus ??
+      "inactive") as MembershipStatus;
 
     return {
       userId: parsed.userId,
@@ -51,7 +70,11 @@ function normalizeCachedAccount(value: string | null): CachedUserAccount | null 
   }
 }
 
-export function UserAccountProvider({ children }: { children: React.ReactNode }) {
+export function UserAccountProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [account, setAccount] = useState<CachedUserAccount | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,7 +117,8 @@ export function UserAccountProvider({ children }: { children: React.ReactNode })
           email,
           membershipPlan,
           membershipStatus,
-          isPremium: membershipPlan === "premium" && membershipStatus === "active",
+          isPremium:
+            membershipPlan === "premium" && membershipStatus === "active",
           updatedAt: new Date().toISOString(),
         };
 
@@ -104,7 +128,7 @@ export function UserAccountProvider({ children }: { children: React.ReactNode })
         setRefreshing(false);
       }
     },
-    [persistAccount]
+    [persistAccount],
   );
 
   useEffect(() => {
@@ -170,14 +194,19 @@ export function UserAccountProvider({ children }: { children: React.ReactNode })
       isPremium: account?.isPremium ?? false,
       refreshAccount,
     }),
-    [account, hydrated, refreshing, refreshAccount]
+    [account, hydrated, refreshing, refreshAccount],
   );
 
-  return <UserAccountContext.Provider value={value}>{children}</UserAccountContext.Provider>;
+  return (
+    <UserAccountContext.Provider value={value}>
+      {children}
+    </UserAccountContext.Provider>
+  );
 }
 
 export function useUserAccount() {
   const context = useContext(UserAccountContext);
-  if (!context) throw new Error("useUserAccount must be used within UserAccountProvider");
+  if (!context)
+    throw new Error("useUserAccount must be used within UserAccountProvider");
   return context;
 }

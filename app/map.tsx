@@ -7,6 +7,7 @@ import {
   Animated,
   Easing,
   Image,
+  Modal,
   PanResponder,
   Platform,
   Pressable,
@@ -103,6 +104,15 @@ type RenderedMapMarker = UserMarkerItem | ClusterMarkerItem;
 type MeetMarkerItem = ReturnType<typeof useMapData>["meets"][number] & {
   latitude: number;
   longitude: number;
+};
+
+type MeetAttendeeListStatus = "going" | "interested";
+
+type MeetAttendeeListItem = {
+  userId: string;
+  status: MeetAttendeeListStatus;
+  updatedAt: string | null;
+  profile: Profile | null;
 };
 
 type MarkerAvatarData = {
@@ -585,6 +595,12 @@ export default function MapScreen() {
   const [meetOwnerActionLoading, setMeetOwnerActionLoading] = useState<
     "cancel" | "delete" | null
   >(null);
+  const [attendeeListOpen, setAttendeeListOpen] = useState(false);
+  const [attendeeListTab, setAttendeeListTab] =
+    useState<MeetAttendeeListStatus>("going");
+  const [attendeeListLoading, setAttendeeListLoading] = useState(false);
+  const [attendeeListError, setAttendeeListError] = useState<string | null>(null);
+  const [meetAttendees, setMeetAttendees] = useState<MeetAttendeeListItem[]>([]);
   const [meetSearchQuery, setMeetSearchQuery] = useState("");
   const [showMeetPins, setShowMeetPins] = useState(true);
   const [clusterMarkerRedrawVersion, setClusterMarkerRedrawVersion] =
@@ -1440,6 +1456,10 @@ export default function MapScreen() {
   const isSelectedMeetOwner = Boolean(
     selectedMeet && effectiveMyUserId && selectedMeet.created_by === effectiveMyUserId,
   );
+  const visibleMeetAttendees = useMemo(
+    () => meetAttendees.filter((attendee) => attendee.status === attendeeListTab),
+    [attendeeListTab, meetAttendees],
+  );
   const filteredMeetMarkers = useMemo(() => {
     const normalized = meetSearchQuery.trim().toLowerCase();
     if (!normalized) return meetMarkers;
@@ -1450,6 +1470,11 @@ export default function MapScreen() {
     });
   }, [meetMarkers, meetSearchQuery]);
 
+  useEffect(() => {
+    setAttendeeListOpen(false);
+    setMeetAttendees([]);
+    setAttendeeListError(null);
+  }, [selectedMeetId]);
   useEffect(() => {
     sheetHeightAnim.setValue(collapsedSheetHeight);
     sheetDragStartHeightRef.current = collapsedSheetHeight;
@@ -1581,6 +1606,155 @@ export default function MapScreen() {
     setShowMeetPins((visible) => !visible);
   }, []);
 
+  const loadMeetAttendees = useCallback(
+    async (meetId: string) => {
+      setAttendeeListLoading(true);
+      setAttendeeListError(null);
+
+      try {
+        const { data: attendanceRows, error: attendanceError } = await supabase
+          .from("meet_attendees")
+          .select("user_id, status, updated_at")
+          .eq("meet_id", meetId)
+          .in("status", ["going", "interested"])
+          .order("updated_at", { ascending: false });
+
+        if (attendanceError) throw attendanceError;
+
+        const validAttendanceRows = (attendanceRows ?? []).filter(
+          (row): row is {
+            user_id: string;
+            status: MeetAttendeeListStatus;
+            updated_at: string | null;
+          } =>
+            Boolean(row.user_id) &&
+            (row.status === "going" || row.status === "interested"),
+        );
+        const attendeeUserIds = Array.from(
+          new Set(validAttendanceRows.map((row) => row.user_id)),
+        );
+
+        if (attendeeUserIds.length === 0) {
+          setMeetAttendees([]);
+          return;
+        }
+
+        const [profileResult, membershipResult, customizationResult] =
+          await Promise.all([
+            supabase
+              .from("profiles")
+              .select(
+                "id, username, display_name, photo_url, profile_visibility, location_visibility, bio, city, state, instagram_handle, tiktok_handle, twitter_handle, snapchat_handle, onboarded",
+              )
+              .in("id", attendeeUserIds),
+            supabase
+              .from("user_memberships")
+              .select("user_id, plan, status")
+              .in("user_id", attendeeUserIds),
+            supabase
+              .from("profile_customizations")
+              .select("user_id, accent_color")
+              .in("user_id", attendeeUserIds),
+          ]);
+
+        if (profileResult.error) throw profileResult.error;
+
+        if (membershipResult.error) {
+          console.warn(
+            "Meet attendee membership load failed:",
+            membershipResult.error.message,
+          );
+        }
+
+        if (customizationResult.error) {
+          console.warn(
+            "Meet attendee customization load failed:",
+            customizationResult.error.message,
+          );
+        }
+
+        const membershipByUserId = new Map<
+          string,
+          { plan: string | null; status: string | null }
+        >();
+        (membershipResult.error ? [] : membershipResult.data ?? []).forEach(
+          (row: any) => {
+            membershipByUserId.set(row.user_id, {
+              plan: row.plan ?? null,
+              status: row.status ?? null,
+            });
+          },
+        );
+
+        const customizationByUserId = new Map<string, string | null>();
+        (customizationResult.error
+          ? []
+          : customizationResult.data ?? []
+        ).forEach((row: any) => {
+          customizationByUserId.set(row.user_id, row.accent_color ?? null);
+        });
+
+        const profileByUserId = new Map<string, Profile>();
+        (profileResult.data ?? []).forEach((profile: any) => {
+          const membership = membershipByUserId.get(profile.id);
+          const plan = membership?.plan ?? null;
+          const membershipStatus = membership?.status ?? null;
+          profileByUserId.set(profile.id, {
+            ...(profile as Profile),
+            membership_plan: plan,
+            membership_status: membershipStatus,
+            accent_color: customizationByUserId.get(profile.id) ?? null,
+            is_active_premium:
+              plan === "premium" && membershipStatus === "active",
+          });
+        });
+
+        const visibleAttendees = validAttendanceRows.reduce<
+          MeetAttendeeListItem[]
+        >((acc, row) => {
+          const profile = profileByUserId.get(row.user_id) ?? null;
+          const isSelf = row.user_id === effectiveMyUserId;
+          const isFriend = friendIds.includes(row.user_id);
+          const profileVisibility = (
+            profile?.profile_visibility ?? "public"
+          ).toLowerCase();
+          const canShowProfile =
+            isSelf ||
+            isFriend ||
+            profileVisibility === "public" ||
+            profileVisibility === "everyone";
+
+          if (!canShowProfile) return acc;
+
+          acc.push({
+            userId: row.user_id,
+            status: row.status,
+            updatedAt: row.updated_at,
+            profile,
+          });
+          return acc;
+        }, []);
+
+        setMeetAttendees(visibleAttendees);
+      } catch (e: any) {
+        setMeetAttendees([]);
+        setAttendeeListError(e?.message ?? "Could not load attendees.");
+      } finally {
+        setAttendeeListLoading(false);
+      }
+    },
+    [effectiveMyUserId, friendIds],
+  );
+
+  const openMeetAttendeeList = useCallback(
+    (status: MeetAttendeeListStatus) => {
+      if (!selectedMeet) return;
+      setAttendeeListTab(status);
+      setAttendeeListOpen(true);
+      void loadMeetAttendees(selectedMeet.id);
+    },
+    [loadMeetAttendees, selectedMeet],
+  );
   const handleGetDirections = useCallback(async () => {
     if (!selectedMeetHasCoordinates || !selectedMeet) return;
 
@@ -1700,12 +1874,17 @@ export default function MapScreen() {
         }
 
         await refreshMeets(effectiveMyUserId);
+        if (attendeeListOpen) {
+          void loadMeetAttendees(selectedMeet.id);
+        }
       } finally {
         setMeetAttendanceSavingStatus(null);
       }
     },
     [
+      attendeeListOpen,
       effectiveMyUserId,
+      loadMeetAttendees,
       meetAttendanceSavingStatus,
       refreshMeets,
       selectedMeet,
@@ -1796,6 +1975,31 @@ export default function MapScreen() {
           })}
         </View>
 
+        <Pressable
+          onPress={() => openMeetAttendeeList("going")}
+          style={({ pressed }) => [
+            styles.meetAttendeesSummaryButton,
+            pressed && { opacity: 0.84 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="View meet attendees"
+        >
+          <View style={styles.meetAttendeesSummaryIconWrap}>
+            <MaterialCommunityIcons
+              name="account-group-outline"
+              size={18}
+              color="#ef4444"
+            />
+          </View>
+          <View style={styles.meetAttendeesSummaryTextWrap}>
+            <Text style={styles.meetAttendeesSummaryTitle}>View attendees</Text>
+            <Text style={styles.meetAttendeesSummarySubtitle}>
+              {selectedMeetAttendanceSummary.going} Going / {" "}
+              {selectedMeetAttendanceSummary.interested} Interested
+            </Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={22} color="#aaa" />
+        </Pressable>
         <View style={styles.meetDetailInfoPanel}>
           <View style={styles.meetDetailDateColumn}>
             <Text style={styles.meetDetailDateDay}>
@@ -2454,6 +2658,147 @@ export default function MapScreen() {
         </View>
       </Animated.View>
 
+      <Modal
+        animationType="fade"
+        transparent
+        visible={attendeeListOpen}
+        onRequestClose={() => setAttendeeListOpen(false)}
+      >
+        <View style={styles.meetAttendeesModalBackdrop}>
+          <View style={styles.meetAttendeesModalCard}>
+            <View style={styles.meetAttendeesModalHeader}>
+              <View style={styles.meetAttendeesModalTitleWrap}>
+                <Text style={styles.meetAttendeesModalTitle}>Attendees</Text>
+                <Text numberOfLines={1} style={styles.meetAttendeesModalSubtitle}>
+                  {selectedMeet?.title || "Meet"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setAttendeeListOpen(false)}
+                style={styles.meetAttendeesModalCloseButton}
+                accessibilityRole="button"
+                accessibilityLabel="Close attendees"
+              >
+                <MaterialCommunityIcons name="close" size={18} color="#fff" />
+              </Pressable>
+            </View>
+
+            <View style={styles.meetAttendeesTabsRow}>
+              {(["going", "interested"] as const).map((tab) => {
+                const selected = attendeeListTab === tab;
+                const count = selectedMeetAttendanceSummary[tab];
+                return (
+                  <Pressable
+                    key={tab}
+                    onPress={() => setAttendeeListTab(tab)}
+                    style={[
+                      styles.meetAttendeesTabButton,
+                      selected && styles.meetAttendeesTabButtonActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.meetAttendeesTabText,
+                        selected && styles.meetAttendeesTabTextActive,
+                      ]}
+                    >
+                      {tab === "going" ? "Going" : "Interested"} ({count})
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {attendeeListLoading ? (
+              <View style={styles.meetAttendeesStateBlock}>
+                <ActivityIndicator color="#fff" />
+              </View>
+            ) : attendeeListError ? (
+              <Text style={styles.errorText}>{attendeeListError}</Text>
+            ) : visibleMeetAttendees.length === 0 ? (
+              <View style={styles.meetAttendeesStateBlock}>
+                <Text style={styles.meetAttendeesEmptyText}>
+                  No {attendeeListTab === "going" ? "going" : "interested"} attendees yet.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.meetAttendeesListScroll}
+                contentContainerStyle={styles.meetAttendeesListContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {visibleMeetAttendees.map((attendee) => {
+                  const profile = attendee.profile;
+                  const name = getProfileMarkerName(profile ?? undefined, attendee.userId);
+                  const avatar = getProfileMarkerAvatar(
+                    profile ?? undefined,
+                    attendee.userId,
+                  );
+                  const subtitle = profile?.username
+                    ? `@${profile.username}`
+                    : attendee.userId === myUserId
+                      ? "You"
+                      : "Cruizr member";
+
+                  return (
+                    <Pressable
+                      key={`${attendee.status}-${attendee.userId}`}
+                      onPress={() => {
+                        setAttendeeListOpen(false);
+                        if (attendee.userId === myUserId) {
+                          setSelectedMeetId(null);
+                          router.push("/profile");
+                          return;
+                        }
+                        void handleMarkerPress(attendee.userId);
+                      }}
+                      style={({ pressed }) => [
+                        styles.meetAttendeeRow,
+                        pressed && { opacity: 0.84 },
+                      ]}
+                    >
+                      {avatar.uri ? (
+                        <Image
+                          source={{ uri: avatar.uri }}
+                          style={[
+                            styles.meetAttendeeAvatar,
+                            { borderColor: avatar.borderColor ?? colors.primary },
+                          ]}
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.meetAttendeeAvatar,
+                            styles.meetAttendeeAvatarFallback,
+                            { borderColor: avatar.borderColor ?? colors.primary },
+                          ]}
+                        >
+                          <Text style={styles.meetAttendeeAvatarInitials}>
+                            {avatar.initials}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.meetAttendeeTextWrap}>
+                        <Text numberOfLines={1} style={styles.meetAttendeeName}>
+                          {name}
+                        </Text>
+                        <Text numberOfLines={1} style={styles.meetAttendeeSubtitle}>
+                          {subtitle}
+                        </Text>
+                      </View>
+                      <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={21}
+                        color="#777"
+                      />
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
       {selectedUserId && !selectedMeetId && (
         <View style={styles.publicProfileOverlay}>
           <View
