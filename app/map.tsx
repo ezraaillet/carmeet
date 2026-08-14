@@ -323,6 +323,21 @@ const UserMarkerLayer = React.memo(function UserMarkerLayer({
           markerAvatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR;
         const isCurrentUser = loc.user_id === effectiveMyUserId;
 
+        if (isCurrentUser) {
+          return (
+            <Marker
+              key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
+              identifier={`user-${loc.user_id}`}
+              coordinate={{ latitude: adjLat, longitude: adjLng }}
+              anchor={{ x: 0.5, y: 1 }}
+              zIndex={MY_USER_MARKER_Z_INDEX}
+              pinColor={colors.primary}
+              onPress={() => onUserMarkerPress(loc.user_id)}
+              stopPropagation
+            />
+          );
+        }
+
         return (
           <Marker
             key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
@@ -330,19 +345,16 @@ const UserMarkerLayer = React.memo(function UserMarkerLayer({
             coordinate={{ latitude: adjLat, longitude: adjLng }}
             anchor={{ x: 0.5, y: 1 }}
             zIndex={isCurrentUser ? MY_USER_MARKER_Z_INDEX : OTHER_USER_MARKER_Z_INDEX}
-            pinColor={isCurrentUser ? colors.primary : undefined}
             onPress={() => onUserMarkerPress(loc.user_id)}
             tracksViewChanges
             stopPropagation
           >
-            {isCurrentUser ? null : (
-              <UserPinAvatar
-                uri={markerUri}
-                initials={markerInitials}
-                borderColor={markerBorderColor}
-                fresh={fresh}
-              />
-            )}
+            <UserPinAvatar
+              uri={markerUri}
+              initials={markerInitials}
+              borderColor={markerBorderColor}
+              fresh={fresh}
+            />
           </Marker>
         );
       })}
