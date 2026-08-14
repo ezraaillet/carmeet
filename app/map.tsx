@@ -334,7 +334,7 @@ const UserMarkerLayer = React.memo(function UserMarkerLayer({
                 : OTHER_USER_MARKER_Z_INDEX
             }
             onPress={() => onUserMarkerPress(loc.user_id)}
-            tracksViewChanges={false}
+            tracksViewChanges={loc.user_id === effectiveMyUserId}
             stopPropagation
           >
             <UserPinAvatar
