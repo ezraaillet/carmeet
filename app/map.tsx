@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Easing,
   Image,
   Modal,
   PanResponder,
@@ -24,7 +25,9 @@ import {
   Profile,
 } from "@/features/map/mapTypes";
 import MapView, {
+  AnimatedRegion,
   Marker,
+  MarkerAnimated,
   PROVIDER_GOOGLE,
   Region,
 } from "react-native-maps";
@@ -72,6 +75,9 @@ import { supabase } from "../database/supabase";
 import { useFocusEffect } from "@react-navigation/native";
 
 const OVERLAP_THRESHOLD_METERS = 1.5;
+const MARKER_JITTER_THRESHOLD_METERS = 2;
+const MARKER_SNAP_THRESHOLD_METERS = 350;
+const MARKER_ANIMATION_DURATION_MS = 900;
 const OVERLAP_SPREAD_RADIUS_METERS = 7;
 const CLUSTER_CURRENT_USER_OVERLAP_THRESHOLD_METERS = 18;
 const CLUSTER_MIN_SIZE = 4;
@@ -205,6 +211,19 @@ function formatMeetRowTime(startTime?: string | null) {
   });
 }
 
+type AnimatedUserMarkerProps = {
+  tracksViewChanges?: boolean;
+  userId: string;
+  zIndex: number;
+  coordinate: AnimatedRegion;
+  fresh: boolean;
+  markerUri: string | null;
+  markerInitials: string;
+  markerBorderColor: string;
+  onPress: (userId: string) => void;
+  onRef: (userId: string, marker: any) => void;
+};
+
 const UserPinAvatar = React.memo(function UserPinAvatar({
   uri,
   initials,
@@ -295,18 +314,58 @@ const ClusterMarker = React.memo(function ClusterMarker({
   );
 });
 
+const AnimatedUserMarker = React.memo(function AnimatedUserMarker({
+  userId,
+  coordinate,
+  fresh,
+  markerUri,
+  markerInitials,
+  markerBorderColor,
+  onPress,
+  onRef,
+  zIndex,
+  tracksViewChanges = false,
+}: AnimatedUserMarkerProps) {
+  return (
+    <MarkerAnimated
+      ref={(marker: any) => onRef(userId, marker)}
+      coordinate={coordinate}
+      anchor={{ x: 0.5, y: 1 }}
+      zIndex={zIndex}
+      onPress={() => onPress(userId)}
+      tracksViewChanges={tracksViewChanges}
+      stopPropagation
+    >
+      <UserPinAvatar
+        uri={markerUri}
+        initials={markerInitials}
+        borderColor={markerBorderColor}
+        fresh={fresh}
+      />
+    </MarkerAnimated>
+  );
+});
+
 const UserMarkerLayer = React.memo(function UserMarkerLayer({
   userMarkerItems,
   profilesById,
   effectiveMyUserId,
   clusterModeVersion,
+  getOrCreateAnimatedUserCoordinate,
   onUserMarkerPress,
+  onUserMarkerRef,
 }: {
   userMarkerItems: UserMarkerItem[];
   profilesById: Record<string, Profile>;
   effectiveMyUserId: string | null | undefined;
   clusterModeVersion: number;
+  getOrCreateAnimatedUserCoordinate: (
+    userId: string,
+    latitude: number,
+    longitude: number,
+  ) => AnimatedRegion;
   onUserMarkerPress: (userId: string) => void;
+  onUserMarkerRef: (userId: string, marker: any) => void;
 }) {
   return (
     <>
@@ -321,41 +380,30 @@ const UserMarkerLayer = React.memo(function UserMarkerLayer({
         const markerInitials = markerAvatar.initials;
         const markerBorderColor =
           markerAvatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR;
-        const isCurrentUser = loc.user_id === effectiveMyUserId;
 
-        if (isCurrentUser) {
-          return (
-            <Marker
-              key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
-              identifier={`user-${loc.user_id}`}
-              coordinate={{ latitude: adjLat, longitude: adjLng }}
-              anchor={{ x: 0.5, y: 1 }}
-              zIndex={MY_USER_MARKER_Z_INDEX}
-              pinColor={colors.primary}
-              onPress={() => onUserMarkerPress(loc.user_id)}
-              stopPropagation
-            />
-          );
-        }
+        const animatedCoordinate = getOrCreateAnimatedUserCoordinate(
+          loc.user_id,
+          adjLat,
+          adjLng,
+        );
 
         return (
-          <Marker
+          <AnimatedUserMarker
             key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
-            identifier={`user-${loc.user_id}`}
-            coordinate={{ latitude: adjLat, longitude: adjLng }}
-            anchor={{ x: 0.5, y: 1 }}
-            zIndex={isCurrentUser ? MY_USER_MARKER_Z_INDEX : OTHER_USER_MARKER_Z_INDEX}
-            onPress={() => onUserMarkerPress(loc.user_id)}
-            tracksViewChanges
-            stopPropagation
-          >
-            <UserPinAvatar
-              uri={markerUri}
-              initials={markerInitials}
-              borderColor={markerBorderColor}
-              fresh={fresh}
-            />
-          </Marker>
+            userId={loc.user_id}
+            zIndex={
+              loc.user_id === effectiveMyUserId
+                ? MY_USER_MARKER_Z_INDEX
+                : OTHER_USER_MARKER_Z_INDEX
+            }
+            coordinate={animatedCoordinate}
+            fresh={fresh}
+            markerUri={markerUri}
+            markerInitials={markerInitials}
+            markerBorderColor={markerBorderColor}
+            onPress={onUserMarkerPress}
+            onRef={onUserMarkerRef}
+          />
         );
       })}
     </>
@@ -610,6 +658,11 @@ export default function MapScreen() {
   const [focusedClusterKey, setFocusedClusterKey] = useState<string | null>(
     null,
   );
+  const animatedUserCoordsRef = useRef<Record<string, AnimatedRegion>>({});
+  const markerRefs = useRef<Record<string, any>>({});
+  const lastAnimatedTargetsRef = useRef<
+    Record<string, { latitude: number; longitude: number }>
+  >({});
   useEffect(() => {
     let mounted = true;
 
@@ -1219,16 +1272,6 @@ export default function MapScreen() {
     [focusedClusterKey],
   );
 
-  const handleRegionChange = useCallback(
-    (_nextRegion: Region, details?: { isGesture?: boolean }) => {
-      if (details?.isGesture) {
-        hasUserMovedMapRef.current = true;
-        isProgrammaticCameraMoveRef.current = false;
-      }
-    },
-    [],
-  );
-
   const meetMarkers = useMemo(() => {
     return meets
       .filter(
@@ -1305,6 +1348,93 @@ export default function MapScreen() {
 
     return loc;
   }, [effectiveMyUserId, locationsById]);
+
+  const getOrCreateAnimatedUserCoordinate = useCallback(
+    (userId: string, latitude: number, longitude: number) => {
+      let coord = animatedUserCoordsRef.current[userId];
+
+      if (!coord) {
+        coord = new AnimatedRegion({
+          latitude,
+          longitude,
+          latitudeDelta: 0,
+          longitudeDelta: 0,
+        });
+        animatedUserCoordsRef.current[userId] = coord;
+        lastAnimatedTargetsRef.current[userId] = { latitude, longitude };
+      }
+
+      return coord;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const nextUserIds = new Set(
+      userMarkerItems.map((item) => item.loc.user_id),
+    );
+
+    Object.keys(animatedUserCoordsRef.current).forEach((userId) => {
+      if (!nextUserIds.has(userId)) {
+        delete animatedUserCoordsRef.current[userId];
+        delete markerRefs.current[userId];
+        delete lastAnimatedTargetsRef.current[userId];
+      }
+    });
+
+    userMarkerItems.forEach((item) => {
+      const userId = item.loc.user_id;
+      const nextCoordinate = {
+        latitude: item.adjLat,
+        longitude: item.adjLng,
+      };
+      const nextAnimatedRegion = {
+        ...nextCoordinate,
+        latitudeDelta: 0,
+        longitudeDelta: 0,
+      };
+
+      const animatedCoord = getOrCreateAnimatedUserCoordinate(
+        userId,
+        nextCoordinate.latitude,
+        nextCoordinate.longitude,
+      );
+
+      const last = lastAnimatedTargetsRef.current[userId] ?? nextCoordinate;
+      const metersMoved = distanceBetweenCoordsMeters(last, nextCoordinate);
+
+      if (metersMoved < MARKER_JITTER_THRESHOLD_METERS) return;
+
+      lastAnimatedTargetsRef.current[userId] = nextCoordinate;
+
+      if (metersMoved > MARKER_SNAP_THRESHOLD_METERS) {
+        animatedCoord.setValue(nextAnimatedRegion);
+        return;
+      }
+
+      if (Platform.OS === "android") {
+        try {
+          markerRefs.current[userId]?.animateMarkerToCoordinate(
+            nextCoordinate,
+            MARKER_ANIMATION_DURATION_MS,
+          );
+        } catch (error: any) {
+          delete markerRefs.current[userId];
+          console.warn("Marker animation skipped:", error?.message ?? error);
+        }
+        return;
+      }
+
+      animatedCoord
+        .timing({
+          ...nextAnimatedRegion,
+          duration: MARKER_ANIMATION_DURATION_MS,
+          useNativeDriver: false,
+          easing: Easing.linear,
+        } as any)
+        .start();
+    });
+  }, [getOrCreateAnimatedUserCoordinate, userMarkerItems]);
 
   const selectedMeet = useMemo(() => {
     if (!selectedMeetId) return null;
@@ -2178,6 +2308,10 @@ export default function MapScreen() {
     );
   }, [blockedUserIds, myUserId, refresh, selectedProfile, selectedUserId]);
 
+  const handleUserMarkerRef = useCallback((userId: string, marker: any) => {
+    markerRefs.current[userId] = marker;
+  }, []);
+
   const handleMeetMarkerPress = useCallback((meetId: string) => {
     setSelectedUserId(null);
     setSelectedProfile(null);
@@ -2342,7 +2476,6 @@ export default function MapScreen() {
         style={StyleSheet.absoluteFill}
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
-        onRegionChange={handleRegionChange}
         onRegionChangeComplete={handleRegionChangeComplete}
       >
         <UserMarkerLayer
@@ -2350,7 +2483,9 @@ export default function MapScreen() {
           profilesById={profilesById}
           effectiveMyUserId={effectiveMyUserId}
           clusterModeVersion={clusterModeVersion}
+          getOrCreateAnimatedUserCoordinate={getOrCreateAnimatedUserCoordinate}
           onUserMarkerPress={handleMarkerPress}
+          onUserMarkerRef={handleUserMarkerRef}
         />
 
         <MeetMarkerLayer
