@@ -527,6 +527,8 @@ export default function MapScreen() {
     latitudeDelta: 0.05,
     longitudeDelta: 0.05,
   });
+  const [myLocationForMarker, setMyLocationForMarker] =
+    useState<LiveLoc | null>(null);
 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
@@ -742,14 +744,16 @@ export default function MapScreen() {
         if (cancelled) return;
 
         if (uid) {
-          setMyLiveLocation({
+          const nextLocation = {
             user_id: uid,
             lat: position.coords.latitude,
             lng: position.coords.longitude,
             heading: position.coords.heading ?? undefined,
             speed: position.coords.speed ?? undefined,
             updated_at: new Date().toISOString(),
-          });
+          };
+          setMyLiveLocation(nextLocation);
+          setMyLocationForMarker(nextLocation);
         }
 
         setRegion((r) => ({
@@ -823,14 +827,16 @@ export default function MapScreen() {
               if (cancelled) return;
 
               if (myUserId) {
-                setMyLiveLocation({
+                const nextLocation = {
                   user_id: myUserId,
                   lat: coords.latitude,
                   lng: coords.longitude,
                   heading: coords.heading ?? undefined,
                   speed: coords.speed ?? undefined,
                   updated_at: new Date().toISOString(),
-                });
+                };
+                setMyLiveLocation(nextLocation);
+                setMyLocationForMarker(nextLocation);
               }
 
               const shouldFollowMyLocation =
@@ -1273,9 +1279,10 @@ export default function MapScreen() {
   const userMarkerItems = useMemo(
     () =>
       mapMarkers.filter(
-        (item): item is UserMarkerItem => item.type === "user",
+        (item): item is UserMarkerItem =>
+          item.type === "user" && item.loc.user_id !== effectiveMyUserId,
       ),
-    [mapMarkers],
+    [effectiveMyUserId, mapMarkers],
   );
 
   const clusterMarkerItems = useMemo(
@@ -2345,6 +2352,35 @@ export default function MapScreen() {
           clusterModeVersion={clusterModeVersion}
           onUserMarkerPress={handleMarkerPress}
         />
+
+        {myLocationForMarker && effectiveMyUserId ? (
+          <Marker
+            key={`current-user-${myLocationForMarker.updated_at ?? "location"}`}
+            identifier="current-user"
+            coordinate={{
+              latitude: myLocationForMarker.lat,
+              longitude: myLocationForMarker.lng,
+            }}
+            centerOffset={{ x: 0, y: -32 }}
+            zIndex={MY_USER_MARKER_Z_INDEX}
+            tracksViewChanges
+            stopPropagation
+          >
+            <UserPinAvatar
+              uri={profilesById[effectiveMyUserId]?.photo_url ?? null}
+              initials={getMarkerInitials(
+                getProfileMarkerName(
+                  profilesById[effectiveMyUserId],
+                  effectiveMyUserId,
+                ),
+              )}
+              borderColor={getProfileMarkerBorderColor(
+                profilesById[effectiveMyUserId],
+              )}
+              fresh={isFresh(myLocationForMarker.updated_at, 2 * 60 * 1000)}
+            />
+          </Marker>
+        ) : null}
 
         <MeetMarkerLayer
           showMeetPins={showMeetPins}
