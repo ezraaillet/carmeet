@@ -83,6 +83,7 @@ type MapDataState = {
   error: string | null;
   myUserId: string | null;
   friendIds: string[];
+  blockedUserIds: string[];
   ids: string[];
   profilesById: Record<string, Profile>;
   locationsById: Record<string, LiveLoc>;
@@ -145,6 +146,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
 
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [friendIds, setFriendIds] = useState<string[]>([]);
+  const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const [ids, setIds] = useState<string[]>([]);
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({});
   const [locationsById, setLocationsById] = useState<Record<string, LiveLoc>>(
@@ -186,6 +188,17 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           .filter((id): id is string => Boolean(id))
       )
     );
+  }, []);
+
+  const fetchBlockedUserIds = useCallback(async (uid: string) => {
+    const { data, error } = await supabase
+      .from("user_blocks")
+      .select("blocked_id")
+      .eq("blocker_id", uid);
+    if (error) throw error;
+    return (data ?? [])
+      .map((row) => row.blocked_id)
+      .filter((id): id is string => Boolean(id));
   }, []);
 
   const fetchNearbyPublicLocations = useCallback(
@@ -449,6 +462,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         if (previousUid !== uid) {
           setFriendsLoaded(false);
           setFriendIds([]);
+          setBlockedUserIds([]);
           setIds([]);
           setProfilesById({});
           setLocationsById({});
@@ -464,15 +478,31 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         }
 
         setFriendsLoaded(false);
-        const friendIds = await fetchFriendIds(uid);
+        const [friendIds, blockedUserIds] = await Promise.all([
+          fetchFriendIds(uid),
+          fetchBlockedUserIds(uid),
+        ]);
         if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
         console.log("[MapData] accepted friends", {
           acceptedFriendCount: friendIds.length,
           friendIds,
         });
-        setFriendIds(friendIds);
+        const blockedIdSet = new Set(blockedUserIds);
+        const visibleFriendIds = friendIds.filter((id) => !blockedIdSet.has(id));
+        setBlockedUserIds(blockedUserIds);
+        setFriendIds(visibleFriendIds);
+        setLocationsById((previous) => {
+          const next = { ...previous };
+          blockedUserIds.forEach((id) => delete next[id]);
+          return next;
+        });
+        setProfilesById((previous) => {
+          const next = { ...previous };
+          blockedUserIds.forEach((id) => delete next[id]);
+          return next;
+        });
         setFriendsLoaded(true);
-        const baseIds = Array.from(new Set([uid, ...friendIds]));
+        const baseIds = Array.from(new Set([uid, ...visibleFriendIds]));
         const baseIdSet = new Set(baseIds);
         setIds(baseIds);
 
@@ -484,13 +514,18 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           );
           if (refreshSeqRef.current !== requestId || currentUserIdRef.current !== uid) return;
 
-          const nearbyIds = nearbyLocations.map((location) => location.user_id);
+          const visibleNearbyLocations = nearbyLocations.filter(
+            (location) => !blockedIdSet.has(location.user_id),
+          );
+          const nearbyIds = visibleNearbyLocations.map(
+            (location) => location.user_id,
+          );
           const combined = Array.from(new Set([...baseIds, ...nearbyIds]));
           setIds(combined);
 
           setLocationsById((previous) => {
             const next = { ...previous };
-            nearbyLocations.forEach((location) => {
+            visibleNearbyLocations.forEach((location) => {
               next[location.user_id] = location;
             });
             return next;
@@ -664,7 +699,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     },
-    [fetchFriendIds, fetchMeets, fetchNearbyPublicLocations]
+    [fetchBlockedUserIds, fetchFriendIds, fetchMeets, fetchNearbyPublicLocations]
   );
 
   const refreshMeets = useCallback(
@@ -694,6 +729,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       error,
       myUserId,
       friendIds,
+      blockedUserIds,
       ids,
       profilesById,
       locationsById,
@@ -710,6 +746,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       error,
       myUserId,
       friendIds,
+      blockedUserIds,
       ids,
       profilesById,
       locationsById,

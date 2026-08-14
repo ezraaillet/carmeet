@@ -75,3 +75,11 @@ export async function insertFriendRequest(myUserId: string, selectedUserId: stri
     created_at: new Date().toISOString(),
   });
 }
+
+export async function blockUser(userId: string) {
+  return supabase.rpc("block_user", { p_blocked_id: userId });
+}
+
+export async function unblockUser(userId: string) {
+  return supabase.rpc("unblock_user", { p_blocked_id: userId });
+}

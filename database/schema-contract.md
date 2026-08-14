@@ -124,6 +124,17 @@ Stores one or more Expo push tokens per user/device for remote notifications.
 
 Server-managed queue of friend and meet events waiting for Expo push delivery.
 
+### `user_blocks`
+
+Stores directed user blocks. A block hides the blocked account from discovery,
+profiles, locations, meets, attendees, and friend interactions.
+
+Observed app-facing fields:
+
+- `blocker_id`
+- `blocked_id`
+- `created_at`
+
 ## RPCs Used By App Code
 
 - `accept_friend_request(p_request_id)`
@@ -133,6 +144,9 @@ Server-managed queue of friend and meet events waiting for Expo push delivery.
 - `can_access_meet(p_meet_id)`
 - `can_view_friend_location(p_user_id)`
 - `enqueue_notification(...)` (trigger-only)
+- `block_user(p_blocked_id)`
+- `unblock_user(p_blocked_id)`
+- `is_user_blocked(p_user_id)`
 
 ## Storage Buckets Used By App Code
 
