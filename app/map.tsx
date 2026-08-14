@@ -1327,8 +1327,11 @@ export default function MapScreen() {
 
   const userMarkerItems = useMemo(
     () =>
-      mapMarkers.filter((item): item is UserMarkerItem => item.type === "user"),
-    [mapMarkers],
+      mapMarkers.filter(
+        (item): item is UserMarkerItem =>
+          item.type === "user" && item.loc.user_id !== effectiveMyUserId,
+      ),
+    [effectiveMyUserId, mapMarkers],
   );
 
   const clusterMarkerItems = useMemo(
@@ -2476,6 +2479,7 @@ export default function MapScreen() {
         style={StyleSheet.absoluteFill}
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
+        showsUserLocation
         onRegionChangeComplete={handleRegionChangeComplete}
       >
         <UserMarkerLayer
