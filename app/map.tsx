@@ -587,6 +587,10 @@ export default function MapScreen() {
     latitudeDelta: 0.05,
     longitudeDelta: 0.05,
   });
+  const [currentUserScreenPoint, setCurrentUserScreenPoint] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
@@ -1351,6 +1355,37 @@ export default function MapScreen() {
 
     return loc;
   }, [effectiveMyUserId, locationsById]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!currentUserLocation || !mapRef.current) {
+      setCurrentUserScreenPoint(null);
+      return;
+    }
+
+    void mapRef.current
+      .pointForCoordinate({
+        latitude: currentUserLocation.lat,
+        longitude: currentUserLocation.lng,
+      })
+      .then((point) => {
+        if (!cancelled) setCurrentUserScreenPoint(point);
+      })
+      .catch(() => {
+        if (!cancelled) setCurrentUserScreenPoint(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentUserLocation,
+    region.latitude,
+    region.longitude,
+    region.latitudeDelta,
+    region.longitudeDelta,
+  ]);
 
   const getOrCreateAnimatedUserCoordinate = useCallback(
     (userId: string, latitude: number, longitude: number) => {
@@ -2479,7 +2514,6 @@ export default function MapScreen() {
         style={StyleSheet.absoluteFill}
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
-        showsUserLocation
         onRegionChangeComplete={handleRegionChangeComplete}
       >
         <UserMarkerLayer
@@ -2511,6 +2545,32 @@ export default function MapScreen() {
           onClusterMarkerPress={handleClusterMarkerPress}
         />
       </MapView>
+
+      {currentUserScreenPoint && currentUserLocation ? (
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <View
+            style={{
+              position: "absolute",
+              left: currentUserScreenPoint.x - 27,
+              top: currentUserScreenPoint.y - 64,
+            }}
+          >
+            <UserPinAvatar
+              uri={profilesById[effectiveMyUserId ?? ""]?.photo_url ?? null}
+              initials={getMarkerInitials(
+                getProfileMarkerName(
+                  profilesById[effectiveMyUserId ?? ""],
+                  effectiveMyUserId ?? "user",
+                ),
+              )}
+              borderColor={getProfileMarkerBorderColor(
+                profilesById[effectiveMyUserId ?? ""],
+              )}
+              fresh={isFresh(currentUserLocation.updated_at, 2 * 60 * 1000)}
+            />
+          </View>
+        </View>
+      ) : null}
 
       <Animated.View
         style={[
