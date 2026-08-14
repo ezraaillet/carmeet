@@ -1774,7 +1774,10 @@ export default function MapScreen() {
             </Text>
           </View>
           <Pressable
-            onPress={() => setSelectedMeetId(null)}
+            onPress={() => {
+              setSelectedMeetId(null);
+              void focusMyLocation();
+            }}
             style={styles.meetDetailCloseButton}
             accessibilityRole="button"
             accessibilityLabel="Close meet details"
