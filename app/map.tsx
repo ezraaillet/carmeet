@@ -587,10 +587,7 @@ export default function MapScreen() {
     latitudeDelta: 0.05,
     longitudeDelta: 0.05,
   });
-  const [currentUserScreenPoint, setCurrentUserScreenPoint] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
+  const [cameraRegion, setCameraRegion] = useState(region);
 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
@@ -1259,9 +1256,22 @@ export default function MapScreen() {
     sourceLocations,
   ]);
 
+  const handleRegionChange = useCallback(
+    (nextRegion: Region, details?: { isGesture?: boolean }) => {
+      setCameraRegion(nextRegion);
+
+      if (details?.isGesture) {
+        hasUserMovedMapRef.current = true;
+        isProgrammaticCameraMoveRef.current = false;
+      }
+    },
+    [],
+  );
+
   const handleRegionChangeComplete = useCallback(
     (nextRegion: Region, details?: { isGesture?: boolean }) => {
       setRegion(nextRegion);
+      setCameraRegion(nextRegion);
 
       if (isProgrammaticCameraMoveRef.current) {
         isProgrammaticCameraMoveRef.current = false;
@@ -1356,36 +1366,19 @@ export default function MapScreen() {
     return loc;
   }, [effectiveMyUserId, locationsById]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const currentUserScreenPoint = useMemo(() => {
+    if (!currentUserLocation) return null;
 
-    if (!currentUserLocation || !mapRef.current) {
-      setCurrentUserScreenPoint(null);
-      return;
-    }
+    const longitudeDelta = Math.max(cameraRegion.longitudeDelta, 0.000001);
+    const latitudeDelta = Math.max(cameraRegion.latitudeDelta, 0.000001);
+    const longitudeOffset = currentUserLocation.lng - cameraRegion.longitude;
+    const latitudeOffset = currentUserLocation.lat - cameraRegion.latitude;
 
-    void mapRef.current
-      .pointForCoordinate({
-        latitude: currentUserLocation.lat,
-        longitude: currentUserLocation.lng,
-      })
-      .then((point) => {
-        if (!cancelled) setCurrentUserScreenPoint(point);
-      })
-      .catch(() => {
-        if (!cancelled) setCurrentUserScreenPoint(null);
-      });
-
-    return () => {
-      cancelled = true;
+    return {
+      x: screenWidth / 2 + (longitudeOffset / longitudeDelta) * screenWidth,
+      y: screenHeight / 2 - (latitudeOffset / latitudeDelta) * screenHeight,
     };
-  }, [
-    currentUserLocation,
-    region.latitude,
-    region.longitude,
-    region.latitudeDelta,
-    region.longitudeDelta,
-  ]);
+  }, [cameraRegion, currentUserLocation, screenHeight, screenWidth]);
 
   const getOrCreateAnimatedUserCoordinate = useCallback(
     (userId: string, latitude: number, longitude: number) => {
@@ -2514,6 +2507,7 @@ export default function MapScreen() {
         style={StyleSheet.absoluteFill}
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
+        onRegionChange={handleRegionChange}
         onRegionChangeComplete={handleRegionChangeComplete}
       >
         <UserMarkerLayer
