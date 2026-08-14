@@ -321,6 +321,7 @@ const UserMarkerLayer = React.memo(function UserMarkerLayer({
         const markerInitials = markerAvatar.initials;
         const markerBorderColor =
           markerAvatar.borderColor ?? DEFAULT_MARKER_BORDER_COLOR;
+        const isCurrentUser = loc.user_id === effectiveMyUserId;
 
         return (
           <Marker
@@ -328,21 +329,20 @@ const UserMarkerLayer = React.memo(function UserMarkerLayer({
             identifier={`user-${loc.user_id}`}
             coordinate={{ latitude: adjLat, longitude: adjLng }}
             anchor={{ x: 0.5, y: 1 }}
-            zIndex={
-              loc.user_id === effectiveMyUserId
-                ? MY_USER_MARKER_Z_INDEX
-                : OTHER_USER_MARKER_Z_INDEX
-            }
+            zIndex={isCurrentUser ? MY_USER_MARKER_Z_INDEX : OTHER_USER_MARKER_Z_INDEX}
+            pinColor={isCurrentUser ? colors.primary : undefined}
             onPress={() => onUserMarkerPress(loc.user_id)}
             tracksViewChanges
             stopPropagation
           >
-            <UserPinAvatar
-              uri={markerUri}
-              initials={markerInitials}
-              borderColor={markerBorderColor}
-              fresh={fresh}
-            />
+            {isCurrentUser ? null : (
+              <UserPinAvatar
+                uri={markerUri}
+                initials={markerInitials}
+                borderColor={markerBorderColor}
+                fresh={fresh}
+              />
+            )}
           </Marker>
         );
       })}
