@@ -327,7 +327,7 @@ const UserMarkerLayer = React.memo(function UserMarkerLayer({
             key={`user-mode-${clusterModeVersion}-${loc.user_id}`}
             identifier={`user-${loc.user_id}`}
             coordinate={{ latitude: adjLat, longitude: adjLng }}
-            anchor={{ x: 0.5, y: 1 }}
+            centerOffset={{ x: 0, y: -32 }}
             zIndex={
               loc.user_id === effectiveMyUserId
                 ? MY_USER_MARKER_Z_INDEX
