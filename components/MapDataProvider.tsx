@@ -93,6 +93,8 @@ type MapDataState = {
   refresh: (uidOverride?: string | null) => Promise<void>;
   refreshMeets: (uidOverride?: string | null) => Promise<void>;
   setMyLiveLocation: (loc: LiveLoc) => void;
+  myMarkerReady: boolean;
+  setMyMarkerReady: (ready: boolean) => void;
 };
 
 const MapDataContext = createContext<MapDataState | null>(null);
@@ -152,6 +154,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
   const [locationsById, setLocationsById] = useState<Record<string, LiveLoc>>(
     {}
   );
+  const [myMarkerReady, setMyMarkerReady] = useState(false);
   const [meets, setMeets] = useState<Meet[]>([]);
   const [myMeetAttendanceByMeetId, setMyMeetAttendanceByMeetId] = useState<
     Record<string, string>
@@ -469,6 +472,7 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
           setMeets([]);
           setMyMeetAttendanceByMeetId({});
           setMeetAttendeeSummaryByMeetId({});
+          setMyMarkerReady(false);
         }
 
         if (!uid) {
@@ -739,6 +743,8 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       refresh,
       refreshMeets,
       setMyLiveLocation,
+      myMarkerReady,
+      setMyMarkerReady,
     }),
     [
       loading,
@@ -756,6 +762,8 @@ export function MapDataProvider({ children }: { children: React.ReactNode }) {
       refresh,
       refreshMeets,
       setMyLiveLocation,
+      myMarkerReady,
+      setMyMarkerReady,
     ]
   );
 

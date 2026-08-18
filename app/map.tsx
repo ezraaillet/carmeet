@@ -15,6 +15,7 @@ import {
   Text,
   TextInput,
   View,
+  type LayoutChangeEvent,
   useWindowDimensions,
 } from "react-native";
 import {
@@ -69,7 +70,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "@/styles/themes";
 import styles from "@/styles/mapstyles";
 import { supabase } from "../database/supabase";
-import { useFocusEffect } from "@react-navigation/native";
+import { useIsFocused } from "@react-navigation/native";
 
 const OVERLAP_THRESHOLD_METERS = 1.5;
 const OVERLAP_SPREAD_RADIUS_METERS = 7;
@@ -210,14 +211,20 @@ const UserPinAvatar = React.memo(function UserPinAvatar({
   initials,
   borderColor,
   fresh = true,
+  onLayout,
 }: {
   uri: string | null;
   initials: string;
   borderColor: string;
   fresh?: boolean;
+  onLayout?: (event: LayoutChangeEvent) => void;
 }) {
   return (
-    <View style={[styles.userPinMarker, { opacity: fresh ? 1 : 0.45 }]}>
+    <View
+      collapsable={false}
+      onLayout={onLayout}
+      style={[styles.userPinMarker, { opacity: fresh ? 1 : 0.45 }]}
+    >
       <View style={[styles.userPinAvatarRing, { borderColor }]}>
         {uri ? (
           <Image source={{ uri }} style={styles.userPinAvatarImage} />
@@ -467,6 +474,7 @@ const ClusterMarkerLayer = React.memo(function ClusterMarkerLayer({
 
 export default function MapScreen() {
   const router = useRouter();
+  const isMapFocused = useIsFocused();
   const params = useLocalSearchParams<{
     focusMeetId?: string;
     focusUserId?: string;
@@ -509,6 +517,7 @@ export default function MapScreen() {
     loading: mapDataLoading,
     myUserId: mapDataUserId,
     setMyLiveLocation,
+    setMyMarkerReady,
   } = useMapData();
 
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -520,6 +529,8 @@ export default function MapScreen() {
   const [, setIsProfileReady] = useState<boolean>(true);
 
   const [gotFix, setGotFix] = useState(false);
+  const [myMarkerRendered, setMyMarkerRendered] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
 
   const [region, setRegion] = useState<Region>({
     latitude: 37.78825,
@@ -727,9 +738,8 @@ export default function MapScreen() {
     [screenHeight, screenWidth],
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!hasPermission || !authed) return;
+  useEffect(() => {
+    if (!isMapFocused || !hasPermission || !authed || !myUserId) return;
 
       let sub: Location.LocationSubscription | null = null;
       let cancelled = false;
@@ -740,21 +750,19 @@ export default function MapScreen() {
       ) => {
         if (cancelled) return;
 
-        const uid = myUserId ?? (await getCurrentAuthUser())?.id ?? null;
+        const uid = myUserId;
         if (cancelled) return;
 
-        if (uid) {
-          const nextLocation = {
-            user_id: uid,
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            heading: position.coords.heading ?? undefined,
-            speed: position.coords.speed ?? undefined,
-            updated_at: new Date().toISOString(),
-          };
-          setMyLiveLocation(nextLocation);
-          setMyLocationForMarker(nextLocation);
-        }
+        const nextLocation = {
+          user_id: uid,
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          heading: position.coords.heading ?? undefined,
+          speed: position.coords.speed ?? undefined,
+          updated_at: new Date().toISOString(),
+        };
+        setMyLiveLocation(nextLocation);
+        setMyLocationForMarker(nextLocation);
 
         setRegion((r) => ({
           ...r,
@@ -876,16 +884,16 @@ export default function MapScreen() {
           void deleteMyLocation(myUserId);
         }
       };
-    }, [
-      hasPermission,
-      authed,
-      upsertMyLocation,
-      setMyLiveLocation,
-      myUserId,
-      hasRequestedMeetTarget,
-      followMyLocationOnMap,
-    ]),
-  );
+  }, [
+    isMapFocused,
+    hasPermission,
+    authed,
+    upsertMyLocation,
+    setMyLiveLocation,
+    myUserId,
+    hasRequestedMeetTarget,
+    followMyLocationOnMap,
+  ]);
 
   const locationsByIdKeys = useMemo(
     () => Object.keys(locationsById),
@@ -895,7 +903,10 @@ export default function MapScreen() {
     () => Object.keys(profilesById),
     [profilesById],
   );
-  const effectiveMyUserId = myUserId ?? mapDataUserId;
+  // The first GPS fix can arrive before auth/bootstrap state has propagated.
+  // Use its resolved user ID so the current marker can render immediately.
+  const effectiveMyUserId =
+    myUserId ?? mapDataUserId ?? myLocationForMarker?.user_id ?? null;
 
   const sourceLocations = useMemo(
     () =>
@@ -2245,7 +2256,9 @@ export default function MapScreen() {
   }
 
   const showBlockingLoader = !authed || hasPermission === null;
-  const showLocationOverlay = hasPermission === true && !gotFix;
+  const showLocationOverlay =
+    hasPermission === true &&
+    (!gotFix || !myLocationForMarker || !effectiveMyUserId || !myMarkerRendered);
   const showMapDataOverlay = mapDataLoading;
 
   if (showBlockingLoader) {
@@ -2342,6 +2355,7 @@ export default function MapScreen() {
         style={StyleSheet.absoluteFill}
         provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
         initialRegion={region}
+        onMapReady={() => setMapReady(true)}
         onRegionChange={handleRegionChange}
         onRegionChangeComplete={handleRegionChangeComplete}
       >
@@ -2355,7 +2369,7 @@ export default function MapScreen() {
 
         {myLocationForMarker && effectiveMyUserId ? (
           <Marker
-            key={`current-user-${myLocationForMarker.updated_at ?? "location"}`}
+            key={`current-user-${mapReady ? "ready" : "pending"}-${myLocationForMarker.updated_at ?? "location"}`}
             identifier="current-user"
             coordinate={{
               latitude: myLocationForMarker.lat,
@@ -2363,7 +2377,7 @@ export default function MapScreen() {
             }}
             centerOffset={{ x: 0, y: -32 }}
             zIndex={MY_USER_MARKER_Z_INDEX}
-            tracksViewChanges
+             tracksViewChanges={!myMarkerRendered}
             stopPropagation
           >
             <UserPinAvatar
@@ -2378,6 +2392,10 @@ export default function MapScreen() {
                 profilesById[effectiveMyUserId],
               )}
               fresh={isFresh(myLocationForMarker.updated_at, 2 * 60 * 1000)}
+              onLayout={() => {
+                setMyMarkerRendered(true);
+                setMyMarkerReady(true);
+              }}
             />
           </Marker>
         ) : null}

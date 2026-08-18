@@ -133,7 +133,7 @@ function StartupSplash() {
   );
 }
 function RootLayoutInner() {
-  const { refresh } = useMapData();
+  const { refresh, myMarkerReady } = useMapData();
   const { hydrated: accountHydrated } = useUserAccount();
 
 
@@ -513,7 +513,9 @@ function RootLayoutInner() {
         />
       </View>
 
-      {!initialAppReady ? <StartupSplash /> : null}
+      {!initialAppReady || (Boolean(userId) && !myMarkerReady) ? (
+        <StartupSplash />
+      ) : null}
     </View>
   );
 }
