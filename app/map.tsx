@@ -1498,6 +1498,7 @@ export default function MapScreen() {
   ]);
 
   const toggleMeetMarkers = useCallback(() => {
+    setMyMarkerRendered(false);
     setShowMeetPins((visible) => !visible);
   }, []);
 
@@ -2369,7 +2370,7 @@ export default function MapScreen() {
 
         {myLocationForMarker && effectiveMyUserId ? (
           <Marker
-            key={`current-user-${mapReady ? "ready" : "pending"}-${myLocationForMarker.updated_at ?? "location"}`}
+            key={`current-user-${mapReady ? "ready" : "pending"}-${clusterMarkerRedrawVersion}-${myLocationForMarker.updated_at ?? "location"}`}
             identifier="current-user"
             coordinate={{
               latitude: myLocationForMarker.lat,
@@ -2377,7 +2378,7 @@ export default function MapScreen() {
             }}
             centerOffset={{ x: 0, y: -32 }}
             zIndex={MY_USER_MARKER_Z_INDEX}
-             tracksViewChanges={!myMarkerRendered}
+            tracksViewChanges={!myMarkerRendered}
             stopPropagation
           >
             <UserPinAvatar
