@@ -54,10 +54,10 @@ import {
 import {
   fetchUserMarkerCardData,
   getCurrentAuthUser,
-  deleteMyLocation,
   insertFriendRequest,
   blockUser,
   unblockUser,
+  submitContentReport,
   upsertLocation,
 } from "@/features/map/mapService";
 import {
@@ -116,6 +116,19 @@ type MeetAttendeeListItem = {
   updatedAt: string | null;
   profile: Profile | null;
 };
+
+type ReportTarget =
+  | { type: "user"; id: string; name: string }
+  | { type: "meet"; id: string; name: string };
+
+const REPORT_REASONS = [
+  { value: "harassment", label: "Harassment or bullying" },
+  { value: "spam", label: "Spam or misleading" },
+  { value: "inappropriate", label: "Inappropriate content" },
+  { value: "scam", label: "Scam or fraud" },
+  { value: "other", label: "Other" },
+] as const;
+type ReportReason = (typeof REPORT_REASONS)[number]["value"];
 
 type MarkerAvatarData = {
   userId: string;
@@ -565,6 +578,10 @@ export default function MapScreen() {
   const [attendeeListError, setAttendeeListError] = useState<string | null>(null);
   const [meetAttendees, setMeetAttendees] = useState<MeetAttendeeListItem[]>([]);
   const [meetSearchQuery, setMeetSearchQuery] = useState("");
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReason>("harassment");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
   const [showMeetPins, setShowMeetPins] = useState(true);
   const [clusterMarkerRedrawVersion, setClusterMarkerRedrawVersion] =
     useState(0);
@@ -880,9 +897,6 @@ export default function MapScreen() {
       return () => {
         cancelled = true;
         sub?.remove();
-        if (myUserId) {
-          void deleteMyLocation(myUserId);
-        }
       };
   }, [
     isMapFocused,
@@ -2004,6 +2018,34 @@ export default function MapScreen() {
             <Text style={styles.meetDetailAddButtonText}>Add</Text>
           </Pressable>
         </View>
+        <Pressable
+          onPress={() =>
+            openReportModal({
+              type: "meet",
+              id: selectedMeet.id,
+              name: selectedMeet.title || "this meet",
+            })
+          }
+          style={({ pressed }) => [
+            {
+              marginTop: 10,
+              minHeight: 40,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.16)",
+              alignItems: "center",
+              justifyContent: "center",
+              flexDirection: "row",
+              gap: 7,
+            },
+            pressed && { opacity: 0.8 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Report meet"
+        >
+          <MaterialCommunityIcons name="flag-outline" size={17} color="#fff" />
+          <Text style={styles.friendBtnText}>Report meet</Text>
+        </Pressable>
       </View>
     );
   }
@@ -2189,6 +2231,41 @@ export default function MapScreen() {
       ],
     );
   }, [blockedUserIds, myUserId, refresh, selectedProfile, selectedUserId]);
+
+  const openReportModal = useCallback((target: ReportTarget) => {
+    setReportTarget(target);
+    setReportReason("harassment");
+    setReportDetails("");
+  }, []);
+
+  const closeReportModal = useCallback(() => {
+    if (reportSubmitting) return;
+    setReportTarget(null);
+  }, [reportSubmitting]);
+
+  const submitReport = useCallback(async () => {
+    if (!reportTarget || reportSubmitting) return;
+
+    setReportSubmitting(true);
+    try {
+      const { error } = await submitContentReport({
+        reportedUserId: reportTarget.type === "user" ? reportTarget.id : undefined,
+        reportedMeetId: reportTarget.type === "meet" ? reportTarget.id : undefined,
+        reason: reportReason,
+        details: reportDetails,
+      });
+
+      if (error) {
+        Alert.alert("Report failed", error.message);
+        return;
+      }
+
+      setReportTarget(null);
+      Alert.alert("Report submitted", "Thanks. Our moderation team will review it.");
+    } finally {
+      setReportSubmitting(false);
+    }
+  }, [reportDetails, reportReason, reportSubmitting, reportTarget]);
 
   const handleMeetMarkerPress = useCallback((meetId: string) => {
     setSelectedUserId(null);
@@ -2757,6 +2834,120 @@ export default function MapScreen() {
           </View>
         </View>
       </Modal>
+      <Modal
+        animationType="fade"
+        transparent
+        visible={Boolean(reportTarget)}
+        onRequestClose={closeReportModal}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.72)",
+            justifyContent: "center",
+            padding: 20,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: "#151515",
+              borderRadius: 16,
+              padding: 18,
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.12)",
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 19, fontWeight: "800" }}>
+              Report {reportTarget?.type === "meet" ? "meet" : "user"}
+            </Text>
+            <Text style={{ color: "#aaa", marginTop: 6 }} numberOfLines={2}>
+              {reportTarget?.name}
+            </Text>
+            <Text style={{ color: "#ddd", marginTop: 18, fontWeight: "700" }}>
+              What is the issue?
+            </Text>
+            <View style={{ marginTop: 8, gap: 7 }}>
+              {REPORT_REASONS.map((reason) => {
+                const selected = reportReason === reason.value;
+                return (
+                  <Pressable
+                    key={reason.value}
+                    onPress={() => setReportReason(reason.value)}
+                    style={{
+                      borderRadius: 9,
+                      borderWidth: 1,
+                      borderColor: selected ? "#ef4444" : "#3b3b3b",
+                      backgroundColor: selected
+                        ? "rgba(239,68,68,0.16)"
+                        : "#202020",
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                    }}
+                  >
+                    <Text style={{ color: "#fff" }}>{reason.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <TextInput
+              value={reportDetails}
+              onChangeText={setReportDetails}
+              placeholder="Additional details (optional)"
+              placeholderTextColor="#777"
+              multiline
+              maxLength={1000}
+              style={{
+                minHeight: 78,
+                marginTop: 12,
+                borderRadius: 9,
+                borderWidth: 1,
+                borderColor: "#3b3b3b",
+                backgroundColor: "#202020",
+                color: "#fff",
+                padding: 11,
+                textAlignVertical: "top",
+              }}
+            />
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+              <Pressable
+                onPress={closeReportModal}
+                disabled={reportSubmitting}
+                style={{
+                  flex: 1,
+                  minHeight: 44,
+                  borderRadius: 9,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "#333",
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "700" }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void submitReport()}
+                disabled={reportSubmitting}
+                style={{
+                  flex: 1,
+                  minHeight: 44,
+                  borderRadius: 9,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "#ef4444",
+                  opacity: reportSubmitting ? 0.7 : 1,
+                }}
+              >
+                {reportSubmitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: "#fff", fontWeight: "800" }}>
+                    Submit report
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
       {selectedUserId && !selectedMeetId && (
         <View style={styles.publicProfileOverlay}>
           <View
@@ -2973,6 +3164,30 @@ export default function MapScreen() {
                           </Text>
                         </>
                       )}
+                    </Pressable>
+                    <Pressable
+                      onPress={() =>
+                        openReportModal({
+                          type: "user",
+                          id: selectedUserId,
+                          name: displayName,
+                        })
+                      }
+                      disabled={blockActionLoading || profileLoading}
+                      style={({ pressed }) => [
+                        styles.publicProfileFriendButton,
+                        { backgroundColor: "#3a3a3a" },
+                        (pressed || blockActionLoading) && { opacity: 0.8 },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Report user"
+                    >
+                      <MaterialCommunityIcons
+                        name="flag-outline"
+                        size={18}
+                        color="#fff"
+                      />
+                      <Text style={styles.friendBtnText}>Report</Text>
                     </Pressable>
                   </View>
                 ) : null}

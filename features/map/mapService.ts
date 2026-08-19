@@ -83,3 +83,23 @@ export async function blockUser(userId: string) {
 export async function unblockUser(userId: string) {
   return supabase.rpc("unblock_user", { p_blocked_id: userId });
 }
+
+export async function submitContentReport(args: {
+  reportedUserId?: string;
+  reportedMeetId?: string;
+  reason: "harassment" | "spam" | "inappropriate" | "scam" | "other";
+  details?: string;
+}) {
+  const user = await getCurrentAuthUser();
+  if (!user) {
+    return { data: null, error: new Error("Authentication required") };
+  }
+
+  return supabase.from("content_reports").insert({
+    reporter_id: user.id,
+    reported_user_id: args.reportedUserId ?? null,
+    reported_meet_id: args.reportedMeetId ?? null,
+    reason: args.reason,
+    details: args.details?.trim() || null,
+  });
+}
