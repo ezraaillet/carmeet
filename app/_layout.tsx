@@ -141,6 +141,7 @@ function RootLayoutInner() {
   const [initialAppReady, setInitialAppReady] = useState(false);
   const [authedEmail, setAuthedEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isModerator, setIsModerator] = useState(false);
 
   const [pendingRequests, setPendingRequests] = useState<FriendRequest[]>([]);
   const [pendingCount, setPendingCount] = useState<number>(0);
@@ -195,6 +196,26 @@ function RootLayoutInner() {
 
     return () => sub.subscription.unsubscribe();
   }, [ensureProfileAndMembership]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!userId) {
+      setIsModerator(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void (async () => {
+      const { data, error } = await supabase.rpc("is_moderator");
+      if (!cancelled) setIsModerator(!error && data === true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   // Fetch pending requests list + count
   const fetchPendingRequests = useCallback(async () => {
@@ -409,26 +430,43 @@ function RootLayoutInner() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Cruizr</Text>
 
-        {authedEmail && (
-          <Pressable
-            onPress={openNotifications}
-            style={styles.notifButton}
-            hitSlop={8}
-          >
-            <Ionicons
-              name="notifications-outline"
-              size={24}
-              color={colors.primary}
-            />
-            {pendingCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {pendingCount > 9 ? "9+" : pendingCount}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        )}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          {isModerator && (
+            <Pressable
+              onPress={() => router.push("/admin")}
+              style={styles.notifButton}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Open moderation queue"
+            >
+              <MaterialCommunityIcons
+                name="shield-check-outline"
+                size={24}
+                color={colors.primary}
+              />
+            </Pressable>
+          )}
+          {authedEmail && (
+            <Pressable
+              onPress={openNotifications}
+              style={styles.notifButton}
+              hitSlop={8}
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={24}
+                color={colors.primary}
+              />
+              {pendingCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {pendingCount > 9 ? "9+" : pendingCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          )}
+        </View>
       </View>
 
       <View style={{ flex: 1, backgroundColor: colors.black }}>
@@ -475,6 +513,7 @@ function RootLayoutInner() {
           />
           <Tabs.Screen name="index" options={{ href: null }} />
           <Tabs.Screen name="auth" options={{ href: null, title: "Sign In" }} />
+          <Tabs.Screen name="admin" options={{ href: null, title: "Moderation" }} />
 
           <Tabs.Screen
             name="profile"

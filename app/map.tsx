@@ -6,6 +6,7 @@ import {
   Alert,
   Animated,
   Image,
+  KeyboardAvoidingView,
   Modal,
   PanResponder,
   Platform,
@@ -2842,14 +2843,19 @@ export default function MapScreen() {
         visible={Boolean(reportTarget)}
         onRequestClose={closeReportModal}
       >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.72)",
-            justifyContent: "center",
-            padding: 20,
-          }}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+          style={{ flex: 1 }}
         >
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{
+              flexGrow: 1,
+              justifyContent: "center",
+              padding: 20,
+            }}
+          >
           <View
             style={{
               backgroundColor: "#151515",
@@ -2948,7 +2954,8 @@ export default function MapScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
       {selectedUserId && !selectedMeetId && (
         <View style={styles.publicProfileOverlay}>

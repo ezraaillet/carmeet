@@ -90,16 +90,10 @@ export async function submitContentReport(args: {
   reason: "harassment" | "spam" | "inappropriate" | "scam" | "other";
   details?: string;
 }) {
-  const user = await getCurrentAuthUser();
-  if (!user) {
-    return { data: null, error: new Error("Authentication required") };
-  }
-
-  return supabase.from("content_reports").insert({
-    reporter_id: user.id,
-    reported_user_id: args.reportedUserId ?? null,
-    reported_meet_id: args.reportedMeetId ?? null,
-    reason: args.reason,
-    details: args.details?.trim() || null,
+  return supabase.rpc("submit_content_report", {
+    p_reported_user_id: args.reportedUserId ?? null,
+    p_reported_meet_id: args.reportedMeetId ?? null,
+    p_reason: args.reason,
+    p_details: args.details?.trim() || null,
   });
 }
