@@ -555,6 +555,7 @@ export default function MapScreen() {
     useState<LiveLoc | null>(null);
 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [profileActionsOpen, setProfileActionsOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -599,6 +600,7 @@ export default function MapScreen() {
 
   useEffect(() => {
     selectedUserIdRef.current = selectedUserId;
+    setProfileActionsOpen(false);
   }, [selectedUserId]);
 
   useEffect(() => {
@@ -3040,6 +3042,113 @@ export default function MapScreen() {
                       </Text>
                     ) : null}
                   </View>
+                  {selectedUserId !== myUserId ? (
+                    <View style={{ position: "relative" }}>
+                      <Pressable
+                        onPress={() => setProfileActionsOpen((open) => !open)}
+                        style={({ pressed }) => [
+                          {
+                            width: 38,
+                            height: 38,
+                            borderRadius: 19,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            backgroundColor: "rgba(255,255,255,0.1)",
+                          },
+                          pressed && { opacity: 0.75 },
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Profile actions"
+                        accessibilityState={{ expanded: profileActionsOpen }}
+                      >
+                        <MaterialCommunityIcons
+                          name="dots-vertical"
+                          size={22}
+                          color="#fff"
+                        />
+                      </Pressable>
+                      {profileActionsOpen ? (
+                        <View
+                          style={{
+                            position: "absolute",
+                            top: 44,
+                            right: 0,
+                            width: 150,
+                            zIndex: 100,
+                            elevation: 10,
+                            padding: 5,
+                            borderRadius: 10,
+                            backgroundColor: "#202020",
+                            borderWidth: 1,
+                            borderColor: "rgba(255,255,255,0.14)",
+                          }}
+                        >
+                          <Pressable
+                            onPress={() => {
+                              setProfileActionsOpen(false);
+                              toggleBlockUser();
+                            }}
+                            disabled={blockActionLoading || profileLoading}
+                            style={({ pressed }) => [
+                              {
+                                minHeight: 40,
+                                paddingHorizontal: 10,
+                                borderRadius: 7,
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 8,
+                              },
+                              pressed && { backgroundColor: "#333" },
+                            ]}
+                          >
+                            <MaterialCommunityIcons
+                              name={
+                                blockedUserIds.includes(selectedUserId)
+                                  ? "account-check"
+                                  : "account-cancel"
+                              }
+                              size={18}
+                              color="#fff"
+                            />
+                            <Text style={styles.friendBtnText}>
+                              {blockedUserIds.includes(selectedUserId)
+                                ? "Unblock"
+                                : "Block"}
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => {
+                              setProfileActionsOpen(false);
+                              openReportModal({
+                                type: "user",
+                                id: selectedUserId,
+                                name: displayName,
+                              });
+                            }}
+                            disabled={blockActionLoading || profileLoading}
+                            style={({ pressed }) => [
+                              {
+                                minHeight: 40,
+                                paddingHorizontal: 10,
+                                borderRadius: 7,
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 8,
+                              },
+                              pressed && { backgroundColor: "#333" },
+                            ]}
+                          >
+                            <MaterialCommunityIcons
+                              name="flag-outline"
+                              size={18}
+                              color="#fff"
+                            />
+                            <Text style={styles.friendBtnText}>Report</Text>
+                          </Pressable>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
 
                 {socialEntries.length > 0 ? (
@@ -3141,54 +3250,6 @@ export default function MapScreen() {
                         <Text style={styles.friendBadgeText}>Friends</Text>
                       </View>
                     )}
-                    <Pressable
-                      onPress={toggleBlockUser}
-                      disabled={blockActionLoading || profileLoading}
-                      style={({ pressed }) => [
-                        styles.publicProfileFriendButton,
-                        { backgroundColor: "#3a3a3a" },
-                        (pressed || blockActionLoading) && { opacity: 0.8 },
-                      ]}
-                    >
-                      {blockActionLoading ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <>
-                          <MaterialCommunityIcons
-                            name={blockedUserIds.includes(selectedUserId) ? "account-check" : "account-cancel"}
-                            size={18}
-                            color="#fff"
-                          />
-                          <Text style={styles.friendBtnText}>
-                            {blockedUserIds.includes(selectedUserId) ? "Unblock" : "Block"}
-                          </Text>
-                        </>
-                      )}
-                    </Pressable>
-                    <Pressable
-                      onPress={() =>
-                        openReportModal({
-                          type: "user",
-                          id: selectedUserId,
-                          name: displayName,
-                        })
-                      }
-                      disabled={blockActionLoading || profileLoading}
-                      style={({ pressed }) => [
-                        styles.publicProfileFriendButton,
-                        { backgroundColor: "#3a3a3a" },
-                        (pressed || blockActionLoading) && { opacity: 0.8 },
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Report user"
-                    >
-                      <MaterialCommunityIcons
-                        name="flag-outline"
-                        size={18}
-                        color="#fff"
-                      />
-                      <Text style={styles.friendBtnText}>Report</Text>
-                    </Pressable>
                   </View>
                 ) : null}
               </View>
